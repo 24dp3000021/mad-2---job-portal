@@ -1,0 +1,1 @@
+<template><div class="container mt-5"><h1>Student Dashboard</h1><p>Browse and Apply for Jobs.</p></div></template>

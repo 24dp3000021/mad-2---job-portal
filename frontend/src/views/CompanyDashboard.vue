@@ -1,0 +1,1 @@
+<template><div class="container mt-5"><h1>Company Dashboard</h1><p>Post Drives and View Applicants.</p></div></template>

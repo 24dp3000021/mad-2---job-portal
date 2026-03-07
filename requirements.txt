@@ -1,0 +1,12 @@
+flask
+flask-sqlalchemy
+flask-security-too
+flask-restful
+flask-cors
+flask-caching
+celery
+redis
+flask-mail
+python-dotenv
+bcrypt==4.0.1
+passlib
