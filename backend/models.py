@@ -39,7 +39,8 @@ class StudentProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     full_name = db.Column(db.String(100), nullable=False)
-    cgpa = db.Column(db.Float)
+    department = db.Column(db.String(100), default="Computer Science") # New Field
+    cgpa = db.Column(db.Float, default=0.0)
     resume_link = db.Column(db.String(255))
     is_blacklisted = db.Column(db.Boolean, default=False)
     applications = db.relationship('Application', backref='student', lazy=True)
@@ -49,6 +50,8 @@ class PlacementDrive(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company_profile.id'), nullable=False)
     job_title = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
+    salary = db.Column(db.String(50)) # New Field
+    location = db.Column(db.String(100)) # New Field
     min_cgpa = db.Column(db.Float, default=0.0)
     deadline = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(20), default='Pending') 
