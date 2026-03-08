@@ -7,7 +7,7 @@ from flask_restful import Api
 # 1. ADD THE MISSING IMPORTS HERE
 from models import db, User, Role
 from config import Config
-from api.resources import UserRegistration, UserLogin, AdminDashboardStats, AdminManagement
+from api.resources import UserRegistration, UserLogin, AdminDashboardStats, AdminManagement, CompanyDriveResource
 
 def create_app():
     app = Flask(__name__)
@@ -23,6 +23,7 @@ def create_app():
     api.add_resource(AdminDashboardStats, '/api/admin/stats')
     api.add_resource(AdminManagement, '/api/admin/manage/<string:target>')
 
+    api.add_resource(CompanyDriveResource, '/api/company/drives/<int:company_user_id>')
     # Initialize Database
     db.init_app(app)
 

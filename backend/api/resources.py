@@ -88,3 +88,35 @@ class AdminManagement(Resource):
         
         db.session.commit()
         return {"message": "Action successful"}, 200
+
+class CompanyDriveResource(Resource):
+    def get(self, company_user_id):
+        company = CompanyProfile.query.filter_by(user_id=company_user_id).first()
+        if not company: return {"message": "Company not found"}, 404
+        drives = PlacementDrive.query.filter_by(company_id=company.id).all()
+        return [{"id": d.id, "title": d.job_title, "status": d.status, "deadline": str(d.deadline)} for d in drives], 200
+
+    def post(self, company_user_id):
+        parser = reqparse.RequestParser()
+        parser.add_argument('job_title', type=str, required=True)
+        parser.add_argument('description', type=str, required=True)
+        parser.add_argument('min_cgpa', type=float, required=True)
+        parser.add_argument('deadline', type=str, required=True) # Format: YYYY-MM-DD
+        args = parser.parse_args()
+
+        company = CompanyProfile.query.filter_by(user_id=company_user_id).first()
+        if not company.is_approved:
+            return {"message": "Account pending admin approval"}, 403
+
+        from datetime import datetime
+        new_drive = PlacementDrive(
+            company_id=company.id,
+            job_title=args['job_title'],
+            description=args['description'],
+            min_cgpa=args['min_cgpa'],
+            deadline=datetime.strptime(args['deadline'], '%Y-%m-%d'),
+            status='Pending'
+        )
+        db.session.add(new_drive)
+        db.session.commit()
+        return {"message": "Drive created! Awaiting admin approval."}, 201
