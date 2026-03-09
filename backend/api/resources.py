@@ -114,8 +114,8 @@ class CompanyDriveResource(Resource):
         parser.add_argument('job_title', type=str, required=True)
         parser.add_argument('description', type=str, required=True)
         parser.add_argument('min_cgpa', type=float, required=True)
-        parser.add_argument('salary', type=str)
-        parser.add_argument('location', type=str)
+        parser.add_argument('salary', type=str) 
+        parser.add_argument('location', type=str) 
         parser.add_argument('deadline', type=str, required=True)
         args = parser.parse_args()
 
@@ -158,9 +158,9 @@ class ApplicationStatusResource(Resource):
 
 class StudentDriveResource(Resource):
     def get(self):
-        # Allow students to see all approved drives so they can see deadlines
-        drives = PlacementDrive.query.filter(PlacementDrive.status == 'Approved').all()
-        return[{"id": d.id, "company_name": d.company.name, "title": d.job_title, "min_cgpa": d.min_cgpa, "deadline": str(d.deadline.date()), "description": d.description, "salary": d.salary, "location": d.location} for d in drives], 200
+        now = datetime.now()
+        drives = PlacementDrive.query.filter(PlacementDrive.status == 'Approved', PlacementDrive.deadline >= now).all()
+        return[{"id": d.id, "company_name": d.company.name, "title": d.job_title, "min_cgpa": d.min_cgpa, "deadline": str(d.deadline.date()), "description": d.description} for d in drives], 200
 
 class StudentProfileAction(Resource):
     def get(self, user_id):
@@ -174,7 +174,7 @@ class StudentProfileAction(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('cgpa', type=float)
         parser.add_argument('resume_link', type=str)
-        parser.add_argument('department', type=str)
+        parser.add_argument('department', type=str) 
         args = parser.parse_args()
         s = StudentProfile.query.filter_by(user_id=user_id).first()
         if args['cgpa'] is not None: s.cgpa = args['cgpa']
@@ -195,10 +195,13 @@ class StudentApplyResource(Resource):
         parser.add_argument('drive_id', type=int, required=True)
         args = parser.parse_args()
 
-        # CRITICAL FIX: Ensure session has latest CGPA from DB
         db.session.expire_all()
         student = StudentProfile.query.filter_by(user_id=args['user_id']).first()
         drive = PlacementDrive.query.get(args['drive_id'])
+
+        # FIX 3: Check if student is blacklisted
+        if student.is_blacklisted:
+            return {"message": "Your profile is blacklisted by the Admin. You cannot apply."}, 403
 
         if float(student.cgpa) < float(drive.min_cgpa):
             return {"message": f"Eligibility failed. Your CGPA: {student.cgpa}, Required: {drive.min_cgpa}"}, 400
@@ -212,5 +215,25 @@ class StudentApplyResource(Resource):
 
     def get(self, user_id):
         student = StudentProfile.query.filter_by(user_id=user_id).first()
+        if not student:
+            return[], 200
+            
         apps = Application.query.filter_by(student_id=student.id).all()
-        return[{"drive_title": a.drive.job_title, "company": a.drive.company.name, "status": a.status, "date": str(a.applied_on.date())} for a in apps], 200
+        result =[]
+        for a in apps:
+            # FIX 2: Safe date fetching prevents Server 500 error which causes empty history
+            app_date = "N/A"
+            if hasattr(a, 'application_date') and a.application_date:
+                app_date = str(a.application_date.date()) if hasattr(a.application_date, 'date') else str(a.application_date)
+            elif hasattr(a, 'applied_on') and a.applied_on:
+                app_date = str(a.applied_on.date()) if hasattr(a.applied_on, 'date') else str(a.applied_on)
+            else:
+                app_date = "Recent"
+
+            result.append({
+                "drive_title": a.drive.job_title, 
+                "company": a.drive.company.name, 
+                "status": a.status, 
+                "date": app_date
+            })
+        return result, 200

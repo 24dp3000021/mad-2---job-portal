@@ -108,7 +108,6 @@
             </div>
         </div>
         
-        <!-- Logic to hide Apply button if deadline passed or ineligible -->
         <div class="mt-4 border-top pt-3 d-flex gap-2 align-items-center">
             <template v-if="!canApply(selectedDrive).allowed">
                 <div class="alert alert-warning mb-0 w-100">
@@ -176,11 +175,10 @@ export default {
       drives: [],
       history:[],
       selectedDrive: {},
-      userId: localStorage.getItem('user_id')
+      userId: null // FIX 1: Null by default. Fetched cleanly on mount.
     }
   },
   computed: {
-    // Search functionality for drives
     filteredDrives() {
       if (!this.searchQuery) return this.drives;
       const q = this.searchQuery.toLowerCase();
@@ -189,7 +187,7 @@ export default {
         d.company_name.toLowerCase().includes(q)
       );
     },
-    // Real time tracking stats generator
+    // Tracking stats now perfectly match the history!
     trackingStats() {
       let stats = { totalApplied: this.history.length, pending: 0, shortlisted: 0, rejected: 0 };
       this.history.forEach(app => {
@@ -203,32 +201,39 @@ export default {
   },
   methods: {
     async loadData() {
-      const [p, c, h, d] = await Promise.all([
-        axios.get(`http://localhost:5000/api/student/profile/${this.userId}`),
-        axios.get(`http://localhost:5000/api/student/companies`),
-        axios.get(`http://localhost:5000/api/student/history/${this.userId}`),
-        axios.get(`http://localhost:5000/api/student/drives`)
-      ]);
-      this.profile = p.data;
-      this.companies = c.data;
-      this.history = h.data;
-      this.drives = d.data;
+      try {
+        const[p, c, h, d] = await Promise.all([
+          axios.get(`http://localhost:5000/api/student/profile/${this.userId}`),
+          axios.get(`http://localhost:5000/api/student/companies`),
+          axios.get(`http://localhost:5000/api/student/history/${this.userId}`),
+          axios.get(`http://localhost:5000/api/student/drives`)
+        ]);
+        this.profile = p.data;
+        this.companies = c.data;
+        this.history = h.data;
+        this.drives = d.data;
+      } catch (err) {
+        console.error("Error fetching data. Make sure backend is running:", err);
+      }
     },
     showDriveDetails(drive) {
         this.selectedDrive = drive;
         this.view = 'drive_details';
     },
     canApply(drive) {
-        // Check Deadline
+        if (this.profile.is_blacklisted) {
+            return { allowed: false, reason: "Your profile is blacklisted by the Admin." };
+        }
+        
         const today = new Date().toISOString().split('T')[0];
         if (drive.deadline < today) {
             return { allowed: false, reason: "The application deadline has passed." };
         }
-        // Check Eligibility
+        
         if (parseFloat(this.profile.cgpa) < parseFloat(drive.min_cgpa)) {
             return { allowed: false, reason: `Minimum CGPA of ${drive.min_cgpa} is required. Your CGPA is ${this.profile.cgpa}.` };
         }
-        // Check if already applied
+        
         const alreadyApplied = this.history.find(h => h.drive_title === drive.title && h.company === drive.company_name);
         if (alreadyApplied) {
             return { allowed: false, reason: "You have already applied for this drive." };
@@ -261,7 +266,13 @@ export default {
     }
   },
   mounted() { 
-      this.loadData(); 
+      // FIX 1: Safely fetch the ID *after* the component loads to fix blank screen
+      this.userId = localStorage.getItem('user_id');
+      if (this.userId) {
+          this.loadData(); 
+      } else {
+          this.$router.push('/');
+      }
   }
 }
 </script>
