@@ -4,38 +4,42 @@ from flask_security import Security, SQLAlchemyUserDatastore
 from flask_cors import CORS
 from flask_restful import Api
 
-# 1. ADD THE MISSING IMPORTS HERE
 from models import db, User, Role
 from config import Config
-from api.resources import (UserRegistration, UserLogin, AdminDashboardStats, 
-                           AdminManagement, CompanyDriveResource, 
-                           DriveApplicationsResource, ApplicationStatusResource,
-                           StudentDriveResource, StudentProfileAction, StudentApplyResource,  StudentCompanyList)
+from api.resources import (UserRegistration, UserLogin, AdminDashboardStats,
+AdminManagement, CompanyDriveResource,
+DriveApplicationsResource, ApplicationStatusResource,
+StudentDriveResource, StudentProfileAction, StudentApplyResource, StudentCompanyList)
+
 def create_app():
-    
     app = Flask(__name__)
     app.config.from_object(Config)
 
     # Allow Vue frontend to communicate with API
     CORS(app)
-    
-    # 2. SETUP API ROUTES
+
+    # SETUP API ROUTES
     api = Api(app)
-# auth routes
+    
+    # auth routes
     api.add_resource(UserRegistration, '/api/register')
     api.add_resource(UserLogin, '/api/login')
+    
     # admin routes
     api.add_resource(AdminDashboardStats, '/api/admin/stats')
     api.add_resource(AdminManagement, '/api/admin/manage/<string:target>')
-# company routes
+    
+    # company routes
     api.add_resource(CompanyDriveResource, '/api/company/drives/<int:company_user_id>')
     api.add_resource(DriveApplicationsResource, '/api/drive/<int:drive_id>/applications')
     api.add_resource(ApplicationStatusResource, '/api/application/status')
-# student routes
+    
+    # student routes
     api.add_resource(StudentDriveResource, '/api/student/drives')
     api.add_resource(StudentProfileAction, '/api/student/profile/<int:user_id>')
     api.add_resource(StudentApplyResource, '/api/student/apply', '/api/student/history/<int:user_id>')
     api.add_resource(StudentCompanyList, '/api/student/companies') 
+    
     # Initialize Database
     db.init_app(app)
 
