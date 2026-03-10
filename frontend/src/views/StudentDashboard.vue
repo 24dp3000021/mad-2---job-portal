@@ -148,7 +148,7 @@
                     <td>
                       <span class="badge" 
                             :class="{'bg-success': app.status === 'Selected' || app.status === 'Shortlisted', 
-                                     'bg-warning text-dark': app.status === 'Applied' || app.status === 'Pending', 
+                                     'bg-warning text-dark': app.status === 'Applied' || app.status === 'Pending' || app.status === 'Waiting', 
                                      'bg-danger': app.status === 'Rejected'}">
                         {{ app.status }}
                       </span>
@@ -174,7 +174,7 @@ export default {
       searchQuery: '',
       profile: { name: '', cgpa: 0, resume: '', department: '', is_blacklisted: false },
       companies: [],
-      drives: [],
+      drives:[],
       history:[],
       selectedDrive: {},
       userId: null 
@@ -196,7 +196,7 @@ export default {
       
       safeHistory.forEach(app => {
         const st = (app.status || '').toLowerCase();
-        if (st === 'applied' || st === 'pending') stats.pending++;
+        if (st === 'applied' || st === 'pending' || st === 'waiting') stats.pending++;
         else if (st === 'shortlisted' || st === 'selected') stats.shortlisted++;
         else if (st === 'rejected') stats.rejected++;
       });
@@ -205,28 +205,32 @@ export default {
   },
   methods: {
     async loadData() {
-      // Hard fetch ID from localStorage inside the method to survive hard refreshes
       this.userId = localStorage.getItem('user_id');
       if (!this.userId) {
         this.$router.push('/');
         return;
       }
 
+      // Safe API loading: If one fails, the others still work!
       try {
-        const [pRes, cRes, hRes, dRes] = await Promise.all([
-          axios.get(`http://localhost:5000/api/student/profile/${this.userId}`),
-          axios.get(`http://localhost:5000/api/student/companies`),
-          axios.get(`http://localhost:5000/api/student/history/${this.userId}`),
-          axios.get(`http://localhost:5000/api/student/drives`)
-        ]);
-        
+        const pRes = await axios.get(`http://localhost:5000/api/student/profile/${this.userId}`);
         this.profile = pRes.data || { name: '', cgpa: 0, is_blacklisted: false };
+      } catch(e) { console.error("Profile Error", e); }
+
+      try {
+        const cRes = await axios.get(`http://localhost:5000/api/student/companies`);
         this.companies = cRes.data ||[];
-        this.history = hRes.data || [];
+      } catch(e) { console.error("Company Error", e); }
+
+      try {
+        const hRes = await axios.get(`http://localhost:5000/api/student/history/${this.userId}`);
+        this.history = hRes.data ||[];
+      } catch(e) { console.error("History Error", e); this.history =[]; }
+
+      try {
+        const dRes = await axios.get(`http://localhost:5000/api/student/drives`);
         this.drives = dRes.data ||[];
-      } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-      }
+      } catch(e) { console.error("Drives Error", e); this.drives =[]; }
     },
     showDriveDetails(drive) {
         this.selectedDrive = drive;
@@ -273,9 +277,13 @@ export default {
     },
     async apply(id) {
       try {
+        // Automatically save CGPA before applying to ensure backend sees the latest
         await axios.put(`http://localhost:5000/api/student/profile/${this.userId}`, { cgpa: this.profile.cgpa });
+        
+        // Submit the application
         const res = await axios.post(`http://localhost:5000/api/student/apply`, { user_id: this.userId, drive_id: id });
         alert(res.data.message);
+        
         await this.loadData();
         this.view = 'home';
       } catch (err) { 
@@ -292,3 +300,8 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.card { transition: transform 0.2s; }
+.card:hover { transform: translateY(-2px); }
+</style>
