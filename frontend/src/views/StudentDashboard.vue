@@ -3,7 +3,7 @@
     <!-- NAVBAR -->
     <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
       <div>
-        <h4 class="mb-0">Welcome {{ profile.name }}</h4>
+        <h4 class="mb-0">Welcome {{ profile.name || 'Student' }}</h4>
         <small>
           <strong>Profile Status: </strong> 
           <span class="badge" :class="profile.is_blacklisted ? 'bg-danger' : 'bg-success'">
@@ -36,7 +36,7 @@
         </div>
         <div class="col-md-3">
           <div class="card bg-success text-white text-center p-3 shadow-sm">
-            <h6>Shortlisted</h6><h3>{{ trackingStats.shortlisted }}</h3>
+            <h6>Shortlisted / Selected</h6><h3>{{ trackingStats.shortlisted }}</h3>
           </div>
         </div>
         <div class="col-md-3">
@@ -59,7 +59,7 @@
             <div class="card-body d-flex justify-content-between align-items-center">
               <div>
                 <h5 class="mb-1 text-primary">{{ drive.title }}</h5>
-                <span class="text-muted">{{ drive.company_name }} | Deadline: <strong>{{ drive.deadline }}</strong></span>
+                <span class="text-muted">{{ drive.company_name }} | Deadline: <strong>{{ drive.deadline }}</strong> | Min CGPA: <strong>{{ drive.min_cgpa }}</strong></span>
               </div>
               <button @click="showDriveDetails(drive)" class="btn btn-outline-primary btn-sm px-3">View & Apply</button>
             </div>
@@ -79,7 +79,9 @@
         <div class="mb-3">
             <label>Department</label>
             <select v-model="profile.department" class="form-select">
-                <option>Computer Science</option><option>Electronics</option><option>Mechanical</option>
+                <option value="Computer Science">Computer Science</option>
+                <option value="Electronics">Electronics</option>
+                <option value="Mechanical">Mechanical</option>
             </select>
         </div>
         <div class="mb-3"><label>CGPA</label><input v-model="profile.cgpa" type="number" step="0.01" class="form-control"></div>
@@ -129,7 +131,7 @@
             <div>
                 <h4>Student Application History</h4>
                 <p class="mb-0"><strong>Student Name:</strong> {{ profile.name }}</p>
-                <p><strong>Department:</strong> {{ profile.department }}</p>
+                <p><strong>Department:</strong> {{ profile.department || 'Not Updated' }}</p>
             </div>
             <button @click="view = 'home'" class="btn btn-outline-primary btn-sm">Back to Home</button>
         </div>
@@ -153,10 +155,10 @@
                     </td>
                 </tr>
                 <tr v-if="history.length === 0">
-                  <td colspan="5" class="text-muted">You have not applied to any companies yet.</td>
+                  <td colspan="5" class="text-muted py-4">You have not applied to any companies yet.</td>
                 </tr>
             </tbody>
-          </table>
+        </table>
       </div>
     </div>
   </div>
@@ -171,49 +173,59 @@ export default {
       view: 'home',
       searchQuery: '',
       profile: { name: '', cgpa: 0, resume: '', department: '', is_blacklisted: false },
-      companies:[],
+      companies: [],
       drives: [],
       history:[],
       selectedDrive: {},
-      userId: null // FIX 1: Null by default. Fetched cleanly on mount.
+      userId: null 
     }
   },
   computed: {
     filteredDrives() {
+      if (!this.drives) return[];
       if (!this.searchQuery) return this.drives;
       const q = this.searchQuery.toLowerCase();
       return this.drives.filter(d => 
-        d.title.toLowerCase().includes(q) || 
-        d.company_name.toLowerCase().includes(q)
+        (d.title && d.title.toLowerCase().includes(q)) || 
+        (d.company_name && d.company_name.toLowerCase().includes(q))
       );
     },
-    // Tracking stats now perfectly match the history!
     trackingStats() {
-      let stats = { totalApplied: this.history.length, pending: 0, shortlisted: 0, rejected: 0 };
-      this.history.forEach(app => {
-        const st = app.status.toLowerCase();
+      const safeHistory = Array.isArray(this.history) ? this.history :[];
+      let stats = { totalApplied: safeHistory.length, pending: 0, shortlisted: 0, rejected: 0 };
+      
+      safeHistory.forEach(app => {
+        const st = (app.status || '').toLowerCase();
         if (st === 'applied' || st === 'pending') stats.pending++;
-        if (st === 'shortlisted' || st === 'selected') stats.shortlisted++;
-        if (st === 'rejected') stats.rejected++;
+        else if (st === 'shortlisted' || st === 'selected') stats.shortlisted++;
+        else if (st === 'rejected') stats.rejected++;
       });
       return stats;
     }
   },
   methods: {
     async loadData() {
+      // Hard fetch ID from localStorage inside the method to survive hard refreshes
+      this.userId = localStorage.getItem('user_id');
+      if (!this.userId) {
+        this.$router.push('/');
+        return;
+      }
+
       try {
-        const[p, c, h, d] = await Promise.all([
+        const [pRes, cRes, hRes, dRes] = await Promise.all([
           axios.get(`http://localhost:5000/api/student/profile/${this.userId}`),
           axios.get(`http://localhost:5000/api/student/companies`),
           axios.get(`http://localhost:5000/api/student/history/${this.userId}`),
           axios.get(`http://localhost:5000/api/student/drives`)
         ]);
-        this.profile = p.data;
-        this.companies = c.data;
-        this.history = h.data;
-        this.drives = d.data;
+        
+        this.profile = pRes.data || { name: '', cgpa: 0, is_blacklisted: false };
+        this.companies = cRes.data ||[];
+        this.history = hRes.data || [];
+        this.drives = dRes.data ||[];
       } catch (err) {
-        console.error("Error fetching data. Make sure backend is running:", err);
+        console.error("Error fetching dashboard data:", err);
       }
     },
     showDriveDetails(drive) {
@@ -222,19 +234,23 @@ export default {
     },
     canApply(drive) {
         if (this.profile.is_blacklisted) {
-            return { allowed: false, reason: "Your profile is blacklisted by the Admin." };
+            return { allowed: false, reason: "Your profile has been blacklisted by the Institute Admin. You cannot apply." };
         }
         
         const today = new Date().toISOString().split('T')[0];
         if (drive.deadline < today) {
-            return { allowed: false, reason: "The application deadline has passed." };
+            return { allowed: false, reason: "The application deadline for this drive has passed." };
         }
         
-        if (parseFloat(this.profile.cgpa) < parseFloat(drive.min_cgpa)) {
+        const myCgpa = parseFloat(this.profile.cgpa) || 0;
+        const requiredCgpa = parseFloat(drive.min_cgpa) || 0;
+        if (myCgpa < requiredCgpa) {
             return { allowed: false, reason: `Minimum CGPA of ${drive.min_cgpa} is required. Your CGPA is ${this.profile.cgpa}.` };
         }
         
-        const alreadyApplied = this.history.find(h => h.drive_title === drive.title && h.company === drive.company_name);
+        const safeHistory = Array.isArray(this.history) ? this.history :[];
+        const alreadyApplied = safeHistory.find(h => h.drive_title === drive.title && h.company === drive.company_name);
+        
         if (alreadyApplied) {
             return { allowed: false, reason: "You have already applied for this drive." };
         }
@@ -242,22 +258,28 @@ export default {
         return { allowed: true, reason: "" };
     },
     async updateProfile() {
-      await axios.put(`http://localhost:5000/api/student/profile/${this.userId}`, { 
-          cgpa: this.profile.cgpa, resume_link: this.profile.resume, department: this.profile.department 
-      });
-      alert("Profile Saved!");
-      this.loadData();
-      this.view = 'home';
+      try {
+        await axios.put(`http://localhost:5000/api/student/profile/${this.userId}`, { 
+            cgpa: this.profile.cgpa, 
+            resume_link: this.profile.resume, 
+            department: this.profile.department 
+        });
+        alert("Profile Saved successfully!");
+        this.loadData();
+        this.view = 'home';
+      } catch (err) {
+        alert("Failed to update profile.");
+      }
     },
     async apply(id) {
       try {
         await axios.put(`http://localhost:5000/api/student/profile/${this.userId}`, { cgpa: this.profile.cgpa });
         const res = await axios.post(`http://localhost:5000/api/student/apply`, { user_id: this.userId, drive_id: id });
         alert(res.data.message);
-        this.loadData();
+        await this.loadData();
         this.view = 'home';
       } catch (err) { 
-        alert(err.response.data.message); 
+        alert(err.response?.data?.message || "An error occurred while applying."); 
       }
     },
     logout() { 
@@ -266,13 +288,7 @@ export default {
     }
   },
   mounted() { 
-      // FIX 1: Safely fetch the ID *after* the component loads to fix blank screen
-      this.userId = localStorage.getItem('user_id');
-      if (this.userId) {
-          this.loadData(); 
-      } else {
-          this.$router.push('/');
-      }
+      this.loadData(); 
   }
 }
 </script>

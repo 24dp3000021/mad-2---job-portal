@@ -5,7 +5,6 @@ from datetime import datetime
 import uuid
 
 # --- PARSERS ---
-
 reg_parser = reqparse.RequestParser()
 reg_parser.add_argument('email', type=str, required=True)
 reg_parser.add_argument('password', type=str, required=True)
@@ -17,7 +16,6 @@ login_parser.add_argument('email', type=str, required=True)
 login_parser.add_argument('password', type=str, required=True)
 
 # --- AUTH ---
-
 class UserRegistration(Resource):
     def post(self):
         args = reg_parser.parse_args()
@@ -49,7 +47,6 @@ class UserLogin(Resource):
         return {"message": "Invalid credentials"}, 401
 
 # --- ADMIN ---
-
 class AdminDashboardStats(Resource):
     def get(self):
         return {
@@ -93,7 +90,6 @@ class AdminManagement(Resource):
         return {"message": "Action successful"}, 200
 
 # --- COMPANY ---
-
 class CompanyDriveResource(Resource):
     def get(self, company_user_id):
         company = CompanyProfile.query.filter_by(user_id=company_user_id).first()
@@ -102,6 +98,7 @@ class CompanyDriveResource(Resource):
         return[{
             "id": d.id,
             "title": d.job_title,
+            "description": d.description,
             "status": d.status,
             "deadline": str(d.deadline.date()),
             "min_cgpa": d.min_cgpa,
@@ -120,27 +117,55 @@ class CompanyDriveResource(Resource):
         args = parser.parse_args()
 
         company = CompanyProfile.query.filter_by(user_id=company_user_id).first()
-        if not company.is_approved:
-            return {"message": "Account pending admin approval"}, 403
+        if not company.is_approved: return {"message": "Account pending admin approval"}, 403
 
         new_drive = PlacementDrive(
-            company_id=company.id,
-            job_title=args['job_title'],
-            description=args['description'],
-            salary=args.get('salary', 'Not Mentioned'),
-            location=args.get('location', 'Remote'),
-            min_cgpa=args['min_cgpa'],
-            deadline=datetime.strptime(args['deadline'], '%Y-%m-%d'),
-            status='Pending'
+            company_id=company.id, job_title=args['job_title'], description=args['description'],
+            salary=args.get('salary', 'Not Mentioned'), location=args.get('location', 'Remote'),
+            min_cgpa=args['min_cgpa'], deadline=datetime.strptime(args['deadline'], '%Y-%m-%d'), status='Pending'
         )
         db.session.add(new_drive)
         db.session.commit()
         return {"message": "Drive created! Awaiting admin approval."}, 201
 
+class CompanySingleDriveResource(Resource):
+    def put(self, drive_id):
+        parser = reqparse.RequestParser()
+        parser.add_argument('job_title', type=str)
+        parser.add_argument('description', type=str)
+        parser.add_argument('min_cgpa', type=float)
+        parser.add_argument('salary', type=str)
+        parser.add_argument('location', type=str)
+        parser.add_argument('deadline', type=str)
+        parser.add_argument('status', type=str)
+        args = parser.parse_args()
+
+        drive = PlacementDrive.query.get(drive_id)
+        if not drive: return {"message": "Drive not found"}, 404
+
+        if args['job_title']: drive.job_title = args['job_title']
+        if args['description']: drive.description = args['description']
+        if args['min_cgpa'] is not None: drive.min_cgpa = args['min_cgpa']
+        if args['salary']: drive.salary = args['salary']
+        if args['location']: drive.location = args['location']
+        if args['deadline']: drive.deadline = datetime.strptime(args['deadline'], '%Y-%m-%d')
+        if args['status']: drive.status = args['status'] # Used for "Mark as Complete"
+
+        db.session.commit()
+        return {"message": "Drive updated successfully!"}, 200
+        
+    def delete(self, drive_id):
+        drive = PlacementDrive.query.get(drive_id)
+        if not drive: return {"message": "Drive not found"}, 404
+        Application.query.filter_by(drive_id=drive.id).delete()
+        db.session.delete(drive)
+        db.session.commit()
+        return {"message": "Drive deleted successfully!"}, 200
+
 class DriveApplicationsResource(Resource):
     def get(self, drive_id):
         apps = Application.query.filter_by(drive_id=drive_id).all()
-        return[{"id": a.id, "student_name": a.student.full_name, "cgpa": a.student.cgpa, "status": a.status} for a in apps], 200
+        return[{"id": a.id, "student_name": a.student.full_name, "cgpa": a.student.cgpa, "status": a.status, "resume": a.student.resume_link} for a in apps], 200
 
 class ApplicationStatusResource(Resource):
     def post(self):
@@ -155,12 +180,12 @@ class ApplicationStatusResource(Resource):
             return {"message": "Status Updated"}, 200
 
 # --- STUDENT ---
-
 class StudentDriveResource(Resource):
     def get(self):
         now = datetime.now()
+        # Only return Approved drives that are not Closed and deadline not passed
         drives = PlacementDrive.query.filter(PlacementDrive.status == 'Approved', PlacementDrive.deadline >= now).all()
-        return[{"id": d.id, "company_name": d.company.name, "title": d.job_title, "min_cgpa": d.min_cgpa, "deadline": str(d.deadline.date()), "description": d.description} for d in drives], 200
+        return[{"id": d.id, "company_name": d.company.name, "title": d.job_title, "min_cgpa": d.min_cgpa, "deadline": str(d.deadline.date()), "description": d.description, "salary": d.salary, "location": d.location} for d in drives], 200
 
 class StudentProfileAction(Resource):
     def get(self, user_id):
@@ -199,7 +224,6 @@ class StudentApplyResource(Resource):
         student = StudentProfile.query.filter_by(user_id=args['user_id']).first()
         drive = PlacementDrive.query.get(args['drive_id'])
 
-        # FIX 3: Check if student is blacklisted
         if student.is_blacklisted:
             return {"message": "Your profile is blacklisted by the Admin. You cannot apply."}, 403
 
@@ -221,15 +245,8 @@ class StudentApplyResource(Resource):
         apps = Application.query.filter_by(student_id=student.id).all()
         result =[]
         for a in apps:
-            # FIX 2: Safe date fetching prevents Server 500 error which causes empty history
-            app_date = "N/A"
-            if hasattr(a, 'application_date') and a.application_date:
-                app_date = str(a.application_date.date()) if hasattr(a.application_date, 'date') else str(a.application_date)
-            elif hasattr(a, 'applied_on') and a.applied_on:
-                app_date = str(a.applied_on.date()) if hasattr(a.applied_on, 'date') else str(a.applied_on)
-            else:
-                app_date = "Recent"
-
+            # FIX: Safe date extraction from applied_on column
+            app_date = a.applied_on.strftime('%Y-%m-%d') if a.applied_on else "Unknown"
             result.append({
                 "drive_title": a.drive.job_title, 
                 "company": a.drive.company.name, 
