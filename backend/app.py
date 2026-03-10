@@ -7,7 +7,7 @@ from flask_restful import Api
 from models import db, User, Role
 from config import Config
 from api.resources import (UserRegistration, UserLogin, AdminDashboardStats,
-AdminManagement, CompanyDriveResource,
+AdminManagement, CompanyDriveResource, CompanySingleDriveResource,
 DriveApplicationsResource, ApplicationStatusResource,
 StudentDriveResource, StudentProfileAction, StudentApplyResource, StudentCompanyList)
 
@@ -31,6 +31,7 @@ def create_app():
     
     # company routes
     api.add_resource(CompanyDriveResource, '/api/company/drives/<int:company_user_id>')
+    api.add_resource(CompanySingleDriveResource, '/api/company/drive/<int:drive_id>')
     api.add_resource(DriveApplicationsResource, '/api/drive/<int:drive_id>/applications')
     api.add_resource(ApplicationStatusResource, '/api/application/status')
     

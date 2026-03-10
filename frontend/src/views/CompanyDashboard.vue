@@ -33,7 +33,11 @@
             <tr v-for="drive in filteredActiveDrives" :key="drive.id">
               <td>{{ drive.title }}</td>
               <td>{{ drive.deadline }}</td>
-              <td><span class="badge bg-warning text-dark">{{ drive.status }}</span></td>
+              <td>
+                <span class="badge" :class="drive.status === 'Approved' ? 'bg-success' : 'bg-warning text-dark'">
+                  {{ drive.status }}
+                </span>
+              </td>
               <td>
                 <button @click="viewApplications(drive)" class="btn btn-sm btn-info me-2">Applications</button>
                 <button @click="openEditForm(drive)" class="btn btn-sm btn-secondary me-2">Edit</button>
@@ -133,7 +137,11 @@
               <td>{{ app.student_name }}</td>
               <td>{{ app.cgpa }}</td>
               <td><a :href="app.resume" target="_blank" v-if="app.resume">View Resume</a><span v-else>-</span></td>
-              <td><span class="badge" :class="app.status === 'Selected' ? 'bg-success' : (app.status === 'Rejected' ? 'bg-danger' : 'bg-warning text-dark')">{{ app.status }}</span></td>
+              <td>
+                <span class="badge" :class="app.status === 'Selected' ? 'bg-success' : (app.status === 'Rejected' ? 'bg-danger' : 'bg-warning text-dark')">
+                  {{ app.status }}
+                </span>
+              </td>
               <td>
                 <select v-model="app.newStatus" class="form-select form-select-sm d-inline-block w-auto me-2">
                   <option disabled value="">Select Status...</option>
@@ -187,7 +195,7 @@ export default {
         const res = await axios.get(`http://localhost:5000/api/company/drives/${this.userId}`);
         this.drives = res.data;
       } catch (err) {
-        console.error("Error loading drives", err);
+        console.error("Failed to load drives", err);
       }
     },
     openCreateForm() {
@@ -195,6 +203,7 @@ export default {
       this.view = 'create';
     },
     openEditForm(drive) {
+      // Form fields match exactly what backend expects
       this.form = { 
         id: drive.id, 
         job_title: drive.title, 
@@ -215,10 +224,11 @@ export default {
           await axios.put(`http://localhost:5000/api/company/drive/${this.form.id}`, this.form);
           alert('Drive updated successfully!');
         }
-        this.loadDrives();
+        await this.loadDrives();
         this.view = 'drives';
       } catch (err) {
-        alert(err.response?.data?.message || "Action failed");
+        alert(err.response?.data?.message || "Action failed. Check console.");
+        console.error(err);
       }
     },
     async deleteDrive(drive_id) {
@@ -226,7 +236,7 @@ export default {
       try {
         await axios.delete(`http://localhost:5000/api/company/drive/${drive_id}`);
         alert("Drive Deleted");
-        this.loadDrives();
+        await this.loadDrives();
       } catch (err) {
         alert("Error deleting drive");
       }
@@ -234,8 +244,9 @@ export default {
     async markComplete(drive_id) {
       if(!confirm("Marking as complete will close this drive. Students will no longer see it or be able to apply. Continue?")) return;
       try {
+        // Send status 'Closed' via PUT request
         await axios.put(`http://localhost:5000/api/company/drive/${drive_id}`, { status: 'Closed' });
-        this.loadDrives();
+        await this.loadDrives();
       } catch (err) {
         alert("Error closing drive");
       }
@@ -254,7 +265,7 @@ export default {
       try {
         await axios.post(`http://localhost:5000/api/application/status`, { application_id: appId, status: newStatus });
         alert(`Status updated to ${newStatus}`);
-        this.viewApplications(this.selectedDrive); // Refresh list
+        await this.viewApplications(this.selectedDrive); 
       } catch (err) {
         alert("Failed to update status");
       }

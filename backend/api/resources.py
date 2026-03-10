@@ -100,7 +100,7 @@ class CompanyDriveResource(Resource):
             "title": d.job_title,
             "description": d.description,
             "status": d.status,
-            "deadline": str(d.deadline.date()),
+            "deadline": d.deadline.strftime('%Y-%m-%d') if d.deadline else "", # FIX: Strict date format for Vue input
             "min_cgpa": d.min_cgpa,
             "salary": d.salary,
             "location": d.location
@@ -149,7 +149,7 @@ class CompanySingleDriveResource(Resource):
         if args['salary']: drive.salary = args['salary']
         if args['location']: drive.location = args['location']
         if args['deadline']: drive.deadline = datetime.strptime(args['deadline'], '%Y-%m-%d')
-        if args['status']: drive.status = args['status'] # Used for "Mark as Complete"
+        if args['status']: drive.status = args['status']
 
         db.session.commit()
         return {"message": "Drive updated successfully!"}, 200
@@ -183,13 +183,14 @@ class ApplicationStatusResource(Resource):
 class StudentDriveResource(Resource):
     def get(self):
         now = datetime.now()
-        # Only return Approved drives that are not Closed and deadline not passed
         drives = PlacementDrive.query.filter(PlacementDrive.status == 'Approved', PlacementDrive.deadline >= now).all()
-        return[{"id": d.id, "company_name": d.company.name, "title": d.job_title, "min_cgpa": d.min_cgpa, "deadline": str(d.deadline.date()), "description": d.description, "salary": d.salary, "location": d.location} for d in drives], 200
+        return[{"id": d.id, "company_name": d.company.name, "title": d.job_title, "min_cgpa": d.min_cgpa, "deadline": str(d.deadline.date()), "description": d.description} for d in drives], 200
 
 class StudentProfileAction(Resource):
     def get(self, user_id):
         s = StudentProfile.query.filter_by(user_id=user_id).first()
+        if not s:
+            return {"name": "User", "cgpa": 0, "resume": "", "department": "", "is_blacklisted": False}, 200
         return {
             "name": s.full_name, "cgpa": s.cgpa, "resume": s.resume_link,
             "department": s.department, "is_blacklisted": s.is_blacklisted
@@ -245,11 +246,19 @@ class StudentApplyResource(Resource):
         apps = Application.query.filter_by(student_id=student.id).all()
         result =[]
         for a in apps:
-            # FIX: Safe date extraction from applied_on column
-            app_date = a.applied_on.strftime('%Y-%m-%d') if a.applied_on else "Unknown"
+            app_date = "N/A"
+            if a.applied_on:
+                try:
+                    app_date = a.applied_on.strftime('%Y-%m-%d')
+                except:
+                    app_date = str(a.applied_on).split(' ')[0]
+            
+            drive_title = a.drive.job_title if a.drive else "Unknown Drive"
+            company_name = a.drive.company.name if a.drive and a.drive.company else "Unknown Company"
+
             result.append({
-                "drive_title": a.drive.job_title, 
-                "company": a.drive.company.name, 
+                "drive_title": drive_title, 
+                "company": company_name, 
                 "status": a.status, 
                 "date": app_date
             })
