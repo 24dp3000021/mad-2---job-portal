@@ -166,8 +166,10 @@ export default {
   methods: {
     async fetchDrives() {
       if (!this.userId) { this.$router.push('/'); return; }
-      const res = await axios.get(`http://localhost:5000/api/company/drives/${this.userId}`)
-      this.drives = res.data
+      try {
+        const res = await axios.get(`http://localhost:5000/api/company/drives/${this.userId}`)
+        this.drives = res.data
+      } catch (err) { console.error("Session sync failed.") }
     },
     prepareCreate() {
       this.isEdit = false
@@ -190,26 +192,34 @@ export default {
     },
     async deleteDrive(id) {
       if (!confirm("Are you sure? This will also remove all applications for this drive.")) return
-      await axios.delete(`http://localhost:5000/api/company/drive/${id}`)
-      this.fetchDrives()
+      try {
+        await axios.delete(`http://localhost:5000/api/company/drive/${id}`)
+        this.fetchDrives()
+      } catch (err) { alert("Error deleting.") }
     },
     async markComplete(id) {
       if (!confirm("Marking as complete will close this drive for all students. Continue?")) return
-      await axios.put(`http://localhost:5000/api/company/drive/${id}/status`, { status: 'Closed' })
-      this.fetchDrives()
+      try {
+        await axios.put(`http://localhost:5000/api/company/drive/${id}/status`, { status: 'Closed' })
+        this.fetchDrives()
+      } catch (err) { alert("Error closing drive.") }
     },
     async openApplicants(d) {
       this.selectedDrive = d
-      const res = await axios.get(`http://localhost:5000/api/drive/${d.id}/applications`)
-      this.apps = res.data
-      this.view = 'applicants'
+      try {
+        const res = await axios.get(`http://localhost:5000/api/drive/${d.id}/applications`)
+        this.apps = res.data
+        this.view = 'applicants'
+      } catch (err) { alert("Error loading applicants.") }
     },
     reviewStudent(app) {
       this.activeApp = app
       this.view = 'review'
     },
     async updateAppStatus(id, status) {
-      await axios.post(`http://localhost:5000/api/application/status`, { application_id: id, status: status })
+      try {
+        await axios.post(`http://localhost:5000/api/application/status`, { application_id: id, status: status })
+      } catch (err) { alert("Status update failed.") }
     },
     getBadge(s) {
       if(s==='Selected') return 'bg-success';
