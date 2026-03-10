@@ -2,6 +2,7 @@ from flask_restful import Resource, reqparse
 from flask_security import hash_password, verify_password
 from models import db, User, Role, StudentProfile, CompanyProfile, PlacementDrive, Application
 from datetime import datetime
+from flask import request
 import uuid
 
 # --- PARSERS ---
@@ -15,7 +16,7 @@ login_parser = reqparse.RequestParser()
 login_parser.add_argument('email', type=str, required=True)
 login_parser.add_argument('password', type=str, required=True)
 
-# --- AUTH ---
+# --- AUTH RESOURCES ---
 class UserRegistration(Resource):
     def post(self):
         args = reg_parser.parse_args()
@@ -27,7 +28,7 @@ class UserRegistration(Resource):
         db.session.add(new_user)
         db.session.flush()
         if args['role'] == 'student':
-            db.session.add(StudentProfile(user_id=new_user.id, full_name=args['name'], cgpa=0.0))
+            db.session.add(StudentProfile(user_id=new_user.id, full_name=args['name'], cgpa=0.0, department="Computer Science"))
         else:
             db.session.add(CompanyProfile(user_id=new_user.id, name=args['name']))
         db.session.commit()
@@ -38,15 +39,16 @@ class UserLogin(Resource):
         args = login_parser.parse_args()
         user = User.query.filter_by(email=args['email']).first()
         if user and verify_password(args['password'], user.password):
+            name = user.student_profile.full_name if user.student_profile else user.company_profile.name if user.company_profile else "Admin"
             return {
                 "token": user.get_auth_token(),
                 "role": user.roles[0].name,
                 "id": user.id,
-                "name": user.student_profile.full_name if user.student_profile else user.company_profile.name if user.company_profile else "Admin"
+                "name": name
             }, 200
         return {"message": "Invalid credentials"}, 401
 
-# --- ADMIN ---
+# --- ADMIN RESOURCES ---
 class AdminDashboardStats(Resource):
     def get(self):
         return {
@@ -59,192 +61,125 @@ class AdminDashboardStats(Resource):
 
 class AdminManagement(Resource):
     def get(self, target):
+        search = request.args.get('search', '').lower()
         if target == 'companies':
             items = CompanyProfile.query.all()
-            return[{"id": i.id, "name": i.name, "is_approved": i.is_approved, "is_blacklisted": i.is_blacklisted, "email": i.user.email} for i in items], 200
+            data = [{"id": i.id, "name": i.name, "is_approved": i.is_approved, "is_blacklisted": i.is_blacklisted, "active": i.user.active, "email": i.user.email} for i in items]
         elif target == 'students':
             items = StudentProfile.query.all()
-            return[{"id": i.id, "name": i.full_name, "cgpa": i.cgpa, "is_blacklisted": i.is_blacklisted, "email": i.user.email} for i in items], 200
+            data = [{"id": i.id, "name": i.full_name, "cgpa": i.cgpa, "is_blacklisted": i.is_blacklisted, "active": i.user.active, "email": i.user.email} for i in items]
         elif target == 'drives':
             items = PlacementDrive.query.all()
-            return[{"id": i.id, "company": i.company.name, "title": i.job_title, "status": i.status} for i in items], 200
+            data = [{"id": i.id, "company": i.company.name, "title": i.job_title, "status": i.status} for i in items]
+        
+        if search:
+            data = [i for i in data if search in str(i).lower()]
+        return data, 200
 
     def post(self, target):
-        parser = reqparse.RequestParser()
-        parser.add_argument('id', type=int, required=True)
-        parser.add_argument('action', type=str, required=True)
-        args = parser.parse_args()
-        obj = None
-        if target == 'companies':
-            obj = CompanyProfile.query.get(args['id'])
-            if args['action'] == 'approve': obj.is_approved = True
-            elif args['action'] == 'blacklist': obj.is_blacklisted = not obj.is_blacklisted
-        elif target == 'drives':
-            obj = PlacementDrive.query.get(args['id'])
-            if args['action'] == 'approve': obj.status = 'Approved'
-            elif args['action'] == 'reject': obj.status = 'Rejected'
-        elif target == 'students':
-            obj = StudentProfile.query.get(args['id'])
-            if args['action'] == 'blacklist': obj.is_blacklisted = not obj.is_blacklisted
+        args = reqparse.RequestParser().add_argument('id', type=int, required=True).add_argument('action', type=str, required=True).parse_args()
+        if target == 'companies': obj = CompanyProfile.query.get(args['id'])
+        elif target == 'drives': obj = PlacementDrive.query.get(args['id'])
+        else: obj = StudentProfile.query.get(args['id'])
+        
+        if args['action'] == 'approve':
+            if target == 'drives': obj.status = 'Approved'
+            else: obj.is_approved = True
+        elif args['action'] == 'blacklist': 
+            obj.is_blacklisted = not obj.is_blacklisted
+            obj.user.active = not obj.is_blacklisted
+        elif args['action'] == 'reject': obj.status = 'Rejected'
         db.session.commit()
-        return {"message": "Action successful"}, 200
+        return {"message": "Success"}, 200
 
-# --- COMPANY ---
+# --- COMPANY RESOURCES ---
 class CompanyDriveResource(Resource):
     def get(self, company_user_id):
         company = CompanyProfile.query.filter_by(user_id=company_user_id).first()
-        if not company: return {"message": "Company not found"}, 404
-        drives = PlacementDrive.query.filter_by(company_id=company.id).all()
-        return[{
-            "id": d.id,
-            "title": d.job_title,
-            "description": d.description,
-            "status": d.status,
-            "deadline": d.deadline.strftime('%Y-%m-%d') if d.deadline else "", # FIX: Strict date format for Vue input
-            "min_cgpa": d.min_cgpa,
-            "salary": d.salary,
-            "location": d.location
-        } for d in drives], 200
+        drives = PlacementDrive.query.filter_by(company_id=company.id).all() if company else []
+        return [{"id": d.id, "title": d.job_title, "status": d.status, "deadline": str(d.deadline.date()), "min_cgpa": d.min_cgpa, "salary": d.salary, "location": d.location, "description": d.description} for d in drives], 200
 
     def post(self, company_user_id):
-        parser = reqparse.RequestParser()
-        parser.add_argument('job_title', type=str, required=True)
-        parser.add_argument('description', type=str, required=True)
-        parser.add_argument('min_cgpa', type=float, required=True)
-        parser.add_argument('salary', type=str) 
-        parser.add_argument('location', type=str) 
-        parser.add_argument('deadline', type=str, required=True)
-        args = parser.parse_args()
-
+        args = reqparse.RequestParser().add_argument('job_title', required=True).add_argument('description', required=True).add_argument('min_cgpa', type=float, required=True).add_argument('salary', required=True).add_argument('location', required=True).add_argument('deadline', required=True).parse_args()
+        deadline_date = datetime.strptime(args['deadline'], '%Y-%m-%d').date()
+        if deadline_date < datetime.now().date(): return {"message": "Deadline cannot be in the past"}, 400
         company = CompanyProfile.query.filter_by(user_id=company_user_id).first()
-        if not company.is_approved: return {"message": "Account pending admin approval"}, 403
-
-        new_drive = PlacementDrive(
-            company_id=company.id, job_title=args['job_title'], description=args['description'],
-            salary=args.get('salary', 'Not Mentioned'), location=args.get('location', 'Remote'),
-            min_cgpa=args['min_cgpa'], deadline=datetime.strptime(args['deadline'], '%Y-%m-%d'), status='Pending'
-        )
-        db.session.add(new_drive)
-        db.session.commit()
-        return {"message": "Drive created! Awaiting admin approval."}, 201
+        db.session.add(PlacementDrive(company_id=company.id, job_title=args['job_title'], description=args['description'], min_cgpa=args['min_cgpa'], salary=args['salary'], location=args['location'], deadline=deadline_date, status='Pending'))
+        db.session.commit(); return {"message": "Success"}, 201
 
 class CompanySingleDriveResource(Resource):
     def put(self, drive_id):
-        parser = reqparse.RequestParser()
-        parser.add_argument('job_title', type=str)
-        parser.add_argument('description', type=str)
-        parser.add_argument('min_cgpa', type=float)
-        parser.add_argument('salary', type=str)
-        parser.add_argument('location', type=str)
-        parser.add_argument('deadline', type=str)
-        parser.add_argument('status', type=str)
-        args = parser.parse_args()
-
-        drive = PlacementDrive.query.get(drive_id)
-        if not drive: return {"message": "Drive not found"}, 404
-
-        if args['job_title']: drive.job_title = args['job_title']
-        if args['description']: drive.description = args['description']
-        if args['min_cgpa'] is not None: drive.min_cgpa = args['min_cgpa']
-        if args['salary']: drive.salary = args['salary']
-        if args['location']: drive.location = args['location']
-        if args['deadline']: drive.deadline = datetime.strptime(args['deadline'], '%Y-%m-%d')
-        if args['status']: drive.status = args['status']
-
-        db.session.commit()
-        return {"message": "Drive updated successfully!"}, 200
-        
+        args = reqparse.RequestParser().add_argument('job_title').add_argument('description').add_argument('min_cgpa', type=float).add_argument('salary').add_argument('location').add_argument('deadline').parse_args()
+        d = PlacementDrive.query.get(drive_id)
+        if args['job_title']: d.job_title = args['job_title']
+        if args['description']: d.description = args['description']
+        if args['min_cgpa'] is not None: d.min_cgpa = args['min_cgpa']
+        if args['salary']: d.salary = args['salary']
+        if args['location']: d.location = args['location']
+        if args['deadline']: d.deadline = datetime.strptime(args['deadline'], '%Y-%m-%d')
+        db.session.commit(); return {"message": "Updated"}, 200
     def delete(self, drive_id):
-        drive = PlacementDrive.query.get(drive_id)
-        if not drive: return {"message": "Drive not found"}, 404
-        Application.query.filter_by(drive_id=drive.id).delete()
-        db.session.delete(drive)
-        db.session.commit()
-        return {"message": "Drive deleted successfully!"}, 200
+        d = PlacementDrive.query.get(drive_id); db.session.delete(d); db.session.commit(); return {"message": "Deleted"}, 200
+
+class CompanyDriveStatusResource(Resource):
+    def put(self, drive_id):
+        args = reqparse.RequestParser().add_argument('status', required=True).parse_args()
+        d = PlacementDrive.query.get(drive_id)
+        d.status = args['status']
+        db.session.commit(); return {"message": "Success"}, 200
 
 class DriveApplicationsResource(Resource):
     def get(self, drive_id):
         apps = Application.query.filter_by(drive_id=drive_id).all()
-        return[{"id": a.id, "student_name": a.student.full_name, "cgpa": a.student.cgpa, "status": a.status, "resume": a.student.resume_link} for a in apps], 200
+        return [{"id": a.id, "student_name": a.student.full_name, "department": a.student.department, "cgpa": a.student.cgpa, "resume": a.student.resume_link, "status": a.status} for a in apps], 200
 
 class ApplicationStatusResource(Resource):
     def post(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument('application_id', type=int, required=True)
-        parser.add_argument('status', type=str, required=True)
-        args = parser.parse_args()
+        args = reqparse.RequestParser().add_argument('application_id', type=int, required=True).add_argument('status', required=True).parse_args()
         app = Application.query.get(args['application_id'])
-        if app:
-            app.status = args['status']
-            db.session.commit()
-            return {"message": "Status Updated"}, 200
+        if app: app.status = args['status']; db.session.commit()
+        return {"message": "Updated"}, 200
 
-# --- STUDENT ---
+# --- STUDENT RESOURCES ---
 class StudentDriveResource(Resource):
     def get(self):
-        now = datetime.now()
-        drives = PlacementDrive.query.filter(PlacementDrive.status == 'Approved', PlacementDrive.deadline >= now).all()
-        return[{"id": d.id, "company_name": d.company.name, "title": d.job_title, "min_cgpa": d.min_cgpa, "deadline": str(d.deadline.date()), "description": d.description} for d in drives], 200
+        drives = PlacementDrive.query.filter_by(status='Approved').all()
+        now = datetime.now().date()
+        return [{"id": d.id, "company_id": d.company_id, "company_name": d.company.name, "title": d.job_title, "min_cgpa": d.min_cgpa, "deadline": str(d.deadline.date()), "description": d.description, "salary": d.salary, "location": d.location, "is_expired": d.deadline.date() < now or d.status == 'Closed'} for d in drives], 200
 
 class StudentProfileAction(Resource):
     def get(self, user_id):
         s = StudentProfile.query.filter_by(user_id=user_id).first()
-        if not s:
-            return {"name": "User", "cgpa": 0, "resume": "", "department": "", "is_blacklisted": False}, 200
-        return {
-            "name": s.full_name, "cgpa": s.cgpa, "resume": s.resume_link,
-            "department": s.department, "is_blacklisted": s.is_blacklisted
-        }, 200
-
+        u = User.query.get(user_id)
+        if not s: return {"message": "Not found"}, 404
+        return {"name": s.full_name, "cgpa": s.cgpa, "resume": s.resume_link, "department": s.department, "active": u.active, "is_blacklisted": s.is_blacklisted}, 200
     def put(self, user_id):
-        parser = reqparse.RequestParser()
-        parser.add_argument('cgpa', type=float)
-        parser.add_argument('resume_link', type=str)
-        parser.add_argument('department', type=str) 
-        args = parser.parse_args()
+        args = reqparse.RequestParser().add_argument('cgpa', type=float).add_argument('resume_link').add_argument('department').parse_args()
         s = StudentProfile.query.filter_by(user_id=user_id).first()
         if args['cgpa'] is not None: s.cgpa = args['cgpa']
         if args['resume_link']: s.resume_link = args['resume_link']
         if args['department']: s.department = args['department']
-        db.session.commit()
-        return {"message": "Profile Updated"}, 200
-
-class StudentCompanyList(Resource):
-    def get(self):
-        companies = CompanyProfile.query.filter_by(is_approved=True).all()
-        return[{"id": c.id, "name": c.name, "description": c.description} for c in companies], 200
+        db.session.commit(); return {"message": "Updated"}, 200
 
 class StudentApplyResource(Resource):
     def post(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument('user_id', type=int, required=True)
-        parser.add_argument('drive_id', type=int, required=True)
-        args = parser.parse_args()
-
+        args = reqparse.RequestParser().add_argument('user_id', type=int, required=True).add_argument('drive_id', type=int, required=True).parse_args()
         db.session.expire_all()
         student = StudentProfile.query.filter_by(user_id=args['user_id']).first()
         drive = PlacementDrive.query.get(args['drive_id'])
-
-        if student.is_blacklisted:
-            return {"message": "Your profile is blacklisted by the Admin. You cannot apply."}, 403
-
-        if float(student.cgpa) < float(drive.min_cgpa):
-            return {"message": f"Eligibility failed. Your CGPA: {student.cgpa}, Required: {drive.min_cgpa}"}, 400
-        
-        if Application.query.filter_by(student_id=student.id, drive_id=drive.id).first():
-            return {"message": "Already applied to this drive"}, 400
-
+        if not student.user.active or student.is_blacklisted: return {"message": "Blacklisted profile. You cannot apply."}, 403
+        if drive.status == 'Closed' or drive.deadline.date() < datetime.now().date(): return {"message": "Drive is closed for applications"}, 400
+        if float(student.cgpa) < float(drive.min_cgpa): return {"message": "Ineligible due to low CGPA"}, 400
+        if Application.query.filter_by(student_id=student.id, drive_id=drive.id).first(): return {"message": "Already Applied"}, 400
         db.session.add(Application(student_id=student.id, drive_id=drive.id, status='Applied'))
-        db.session.commit()
-        return {"message": "Application submitted successfully!"}, 201
+        db.session.commit(); return {"message": "Applied!"}, 201
 
+class StudentHistoryResource(Resource):
     def get(self, user_id):
         student = StudentProfile.query.filter_by(user_id=user_id).first()
-        if not student:
-            return[], 200
-            
+        if not student: return [], 200
         apps = Application.query.filter_by(student_id=student.id).all()
-        result =[]
+        result = []
         for a in apps:
             app_date = "N/A"
             if a.applied_on:
@@ -252,14 +187,9 @@ class StudentApplyResource(Resource):
                     app_date = a.applied_on.strftime('%Y-%m-%d')
                 except:
                     app_date = str(a.applied_on).split(' ')[0]
-            
-            drive_title = a.drive.job_title if a.drive else "Unknown Drive"
-            company_name = a.drive.company.name if a.drive and a.drive.company else "Unknown Company"
-
-            result.append({
-                "drive_title": drive_title, 
-                "company": company_name, 
-                "status": a.status, 
-                "date": app_date
-            })
+            result.append({"drive_id": a.drive_id, "drive_title": a.drive.job_title, "company": a.drive.company.name, "status": a.status, "date": app_date})
         return result, 200
+
+class StudentCompanyList(Resource):
+    def get(self):
+        return [{"id": c.id, "name": c.name, "description": c.description} for c in CompanyProfile.query.filter_by(is_approved=True).all()], 200

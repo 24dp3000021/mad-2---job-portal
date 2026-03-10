@@ -1,282 +1,223 @@
 <template>
   <div class="container mt-4 pb-5">
-    <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
-      <div><h4>Welcome {{ companyName }}</h4></div>
-      <button @click="logout" class="btn btn-outline-danger btn-sm">logout</button>
+    <!-- TOP BAR -->
+    <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-4">
+      <h5 class="mb-0 text-muted">Welcome <span class="text-dark fw-bold">{{ companyName }}</span></h5>
+      <button @click="logout" class="btn btn-link text-danger text-decoration-none small">logout</button>
     </div>
 
-    <!-- Navigation Tabs -->
-    <ul class="nav nav-tabs mb-4">
-      <li class="nav-item">
-        <button class="nav-link" :class="{active: view === 'drives'}" @click="view = 'drives'">My Drives</button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" :class="{active: view === 'create'}" @click="openCreateForm()">Create New Drive</button>
-      </li>
-    </ul>
-
-    <!-- VIEW 1: MANAGE DRIVES -->
-    <div v-if="view === 'drives'">
+    <!-- VIEW 1: MAIN DASHBOARD (Upcoming & Closed Tables) -->
+    <div v-if="view === 'main'">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold">Upcoming Drives</h6>
+        <button class="btn btn-success btn-sm px-4 shadow-sm" @click="prepareCreate" data-bs-toggle="modal" data-bs-target="#driveModal">Create Drive</button>
+      </div>
       
-      <!-- Search Bar -->
-      <div class="mb-3 d-flex justify-content-end">
-        <input v-model="searchQuery" type="text" class="form-control w-25" placeholder="Search Drive Title...">
-      </div>
-
-      <div class="card shadow-sm mb-4">
-        <div class="card-header bg-primary text-white">Upcoming / Active Drives</div>
-        <table class="table table-hover mb-0 align-middle">
+      <!-- Table: Upcoming -->
+      <div class="card shadow-sm mb-4 border-0">
+        <table class="table table-bordered mb-0 align-middle text-center small">
           <thead class="table-light">
-            <tr><th>Drive Title</th><th>Deadline</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>Sr No.</th><th>Drive Name</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            <tr v-for="drive in filteredActiveDrives" :key="drive.id">
-              <td>{{ drive.title }}</td>
-              <td>{{ drive.deadline }}</td>
+            <tr v-for="(d, idx) in upcoming" :key="d.id">
+              <td>{{ 1001 + idx }}.</td>
+              <td class="fw-bold">{{ d.title }}</td>
               <td>
-                <span class="badge" :class="drive.status === 'Approved' ? 'bg-success' : 'bg-warning text-dark'">
-                  {{ drive.status }}
-                </span>
-              </td>
-              <td>
-                <button @click="viewApplications(drive)" class="btn btn-sm btn-info me-2">Applications</button>
-                <button @click="openEditForm(drive)" class="btn btn-sm btn-secondary me-2">Edit</button>
-                <button @click="markComplete(drive.id)" class="btn btn-sm btn-success me-2">Mark Complete</button>
-                <button @click="deleteDrive(drive.id)" class="btn btn-sm btn-danger">Delete</button>
+                <button @click="openApplicants(d)" class="btn btn-outline-primary btn-sm me-2">view details</button>
+                <button @click="editDrive(d)" class="btn btn-outline-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#driveModal">edit</button>
+                <button @click="deleteDrive(d.id)" class="btn btn-outline-danger btn-sm me-2">delete</button>
+                <button @click="markComplete(d.id)" class="btn btn-outline-success btn-sm">mark as complete</button>
               </td>
             </tr>
-            <tr v-if="filteredActiveDrives.length === 0"><td colspan="4" class="text-center text-muted">No active drives found.</td></tr>
+            <tr v-if="upcoming.length === 0"><td colspan="3" class="py-4 text-muted">No upcoming drives. Create one to start hiring.</td></tr>
           </tbody>
         </table>
       </div>
 
-      <div class="card shadow-sm">
-        <div class="card-header bg-secondary text-white">Closed Drives</div>
-        <table class="table table-hover mb-0 align-middle">
+      <h6 class="fw-bold">Closed Drives</h6>
+      <!-- Table: Closed -->
+      <div class="card shadow-sm border-0">
+        <table class="table table-bordered mb-0 align-middle text-center small">
           <thead class="table-light">
-            <tr><th>Drive Title</th><th>Deadline</th><th>Actions</th></tr>
+            <tr><th>Sr No.</th><th>Drive Name</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            <tr v-for="drive in filteredClosedDrives" :key="drive.id">
-              <td>{{ drive.title }}</td>
-              <td>{{ drive.deadline }}</td>
-              <td>
-                <button @click="viewApplications(drive)" class="btn btn-sm btn-info me-2">View Results</button>
-                <button @click="deleteDrive(drive.id)" class="btn btn-sm btn-danger">Delete</button>
-              </td>
+            <tr v-for="(d, idx) in closed" :key="d.id">
+              <td>{{ 1011 + idx }}.</td>
+              <td>{{ d.title }}</td>
+              <td><button @click="openApplicants(d)" class="btn btn-outline-secondary btn-sm">update / view results</button></td>
             </tr>
-            <tr v-if="filteredClosedDrives.length === 0"><td colspan="3" class="text-center text-muted">No closed drives found.</td></tr>
+            <tr v-if="closed.length === 0"><td colspan="3" class="py-4 text-muted">No closed drives yet.</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- VIEW 2: CREATE / EDIT DRIVE FORM -->
-    <div v-if="view === 'create' || view === 'edit'" class="row justify-content-center">
-      <div class="col-md-8">
-        <div class="card shadow p-4">
-          <h4 class="mb-4">{{ view === 'edit' ? 'Edit Drive' : 'Create Placement Drive' }}</h4>
-          <form @submit.prevent="submitDrive">
-            <div class="mb-3">
-              <label>Job Title</label>
-              <input v-model="form.job_title" type="text" class="form-control" required>
-            </div>
-            <div class="mb-3">
-              <label>Job Description</label>
-              <textarea v-model="form.description" class="form-control" rows="3" required></textarea>
+    <!-- VIEW 2: APPLICANT LIST (With CGPA Filter) -->
+    <div v-if="view === 'applicants'" class="card shadow p-4 border-0">
+      <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+        <div>
+           <h5 class="mb-0">Update Applications for the Drive</h5>
+           <p class="text-muted small mb-0">Job Title: <strong>{{ selectedDrive.title }}</strong></p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+           <label class="small text-nowrap">Min CGPA Filter:</label>
+           <input v-model.number="cgpaFilter" type="number" step="0.1" class="form-control form-control-sm" style="width:80px">
+        </div>
+      </div>
+
+      <table class="table table-bordered align-middle text-center small">
+        <thead class="table-light"><tr><th>Received Applications</th><th>Current Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr v-for="a in filteredApps" :key="a.id">
+            <td class="text-start">{{ a.student_name }} ({{ a.cgpa }} CGPA)</td>
+            <td><span class="badge" :class="getBadge(a.status)">{{ a.status }}</span></td>
+            <td><button @click="reviewStudent(a)" class="btn btn-outline-primary btn-sm px-3">review application</button></td>
+          </tr>
+          <tr v-if="filteredApps.length === 0"><td colspan="3" class="py-4 text-muted">No applicants found matching filter.</td></tr>
+        </tbody>
+      </table>
+      <div class="text-end mt-4">
+        <button @click="view = 'main'" class="btn btn-success px-5">save & back</button>
+      </div>
+    </div>
+
+    <!-- VIEW 3: INDIVIDUAL STUDENT REVIEW (Drill-down) -->
+    <div v-if="view === 'review'" class="card shadow p-4 border-0">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <h3 class="mb-4">Student Application</h3>
+          <p class="mb-1"><strong>Student Name:</strong> {{ activeApp.student_name }}</p>
+          <p class="mb-1"><strong>Department:</strong> {{ activeApp.department }}</p>
+          <p class="mb-1"><strong>Applied for Drive:</strong> {{ selectedDrive.title }}</p>
+          <p class="mb-1"><strong>Current CGPA:</strong> {{ activeApp.cgpa }}</p>
+          
+          <div class="mt-4 pt-3 border-top d-flex align-items-center gap-3">
+            <a :href="activeApp.resume" target="_blank" class="btn btn-outline-primary btn-sm px-3">view resume</a>
+            <select v-model="activeApp.status" @change="updateAppStatus(activeApp.id, activeApp.status)" class="form-select form-select-sm" style="width:200px">
+               <option value="Applied">v Choose Status</option>
+               <option value="Shortlisted">Shortlist</option>
+               <option value="Waiting">Waiting</option>
+               <option value="Rejected">Reject</option>
+               <option value="Selected">Select</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-md-4 text-center">
+          <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center mx-auto" style="width:180px; height:180px">
+              <span class="text-muted">PHOTO</span>
+          </div>
+        </div>
+      </div>
+      <div class="text-end mt-5 border-top pt-3">
+        <button @click="view = 'applicants'" class="btn btn-outline-secondary px-4">back to list</button>
+      </div>
+    </div>
+
+    <!-- MODAL: CREATE / EDIT DRIVE -->
+    <div class="modal fade" id="driveModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content shadow border-0 p-3">
+          <div class="modal-header border-0"><h5 class="modal-title fw-bold">{{ isEdit ? 'Update Drive Details' : 'Create a New Drive' }}</h5></div>
+          <div class="modal-body">
+            <div class="mb-3"><label class="small fw-bold">Drive Name / Job Title</label><input v-model="form.job_title" class="form-control" placeholder="e.g. Software Engineer"></div>
+            <div class="mb-3"><label class="small fw-bold">Job Description</label><textarea v-model="form.description" class="form-control" rows="3" placeholder="Provide roles and responsibilities..."></textarea></div>
+            <div class="row">
+              <div class="col-6 mb-3"><label class="small fw-bold">Salary (CTC)</label><input v-model="form.salary" class="form-control" placeholder="e.g. 8,50,000"></div>
+              <div class="col-6 mb-3"><label class="small fw-bold">Location</label><input v-model="form.location" class="form-control" placeholder="e.g. Bangalore, Remote"></div>
             </div>
             <div class="row">
-              <div class="col-md-6 mb-3">
-                <label>Minimum CGPA</label>
-                <input v-model="form.min_cgpa" type="number" step="0.01" class="form-control" required>
-              </div>
-              <div class="col-md-6 mb-3">
-                <label>Application Deadline</label>
-                <input v-model="form.deadline" type="date" :min="today" class="form-control" required>
-              </div>
+              <div class="col-6 mb-3"><label class="small fw-bold">Min CGPA Criteria</label><input v-model.number="form.min_cgpa" type="number" step="0.1" class="form-control"></div>
+              <div class="col-6 mb-3"><label class="small fw-bold">Application Deadline</label><input v-model="form.deadline" type="date" class="form-control"></div>
             </div>
-            <div class="row">
-              <div class="col-md-6 mb-3">
-                <label>Salary (LPA/CTC)</label>
-                <input v-model="form.salary" type="text" class="form-control">
-              </div>
-              <div class="col-md-6 mb-3">
-                <label>Location</label>
-                <input v-model="form.location" type="text" class="form-control">
-              </div>
-            </div>
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary w-100">{{ view === 'edit' ? 'Update Drive' : 'Create Drive' }}</button>
-              <button type="button" @click="view = 'drives'" class="btn btn-secondary w-100">Cancel</button>
-            </div>
-          </form>
+          </div>
+          <div class="modal-footer border-0">
+            <button @click="submitDrive" class="btn btn-success w-100 py-2" data-bs-dismiss="modal">save drive</button>
+          </div>
         </div>
       </div>
     </div>
-
-    <!-- VIEW 3: VIEW APPLICATIONS -->
-    <div v-if="view === 'applications'">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4>Applications for: <span class="text-primary">{{ selectedDrive.title }}</span></h4>
-        <button @click="view = 'drives'" class="btn btn-outline-secondary btn-sm">Back to Drives</button>
-      </div>
-
-      <div class="card shadow-sm">
-        <table class="table table-bordered mb-0 text-center align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>Student Name</th>
-              <th>CGPA</th>
-              <th>Resume</th>
-              <th>Status</th>
-              <th>Update Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="app in applications" :key="app.id">
-              <td>{{ app.student_name }}</td>
-              <td>{{ app.cgpa }}</td>
-              <td><a :href="app.resume" target="_blank" v-if="app.resume">View Resume</a><span v-else>-</span></td>
-              <td>
-                <span class="badge" :class="app.status === 'Selected' ? 'bg-success' : (app.status === 'Rejected' ? 'bg-danger' : 'bg-warning text-dark')">
-                  {{ app.status }}
-                </span>
-              </td>
-              <td>
-                <select v-model="app.newStatus" class="form-select form-select-sm d-inline-block w-auto me-2">
-                  <option disabled value="">Select Status...</option>
-                  <option value="Shortlisted">Shortlist</option>
-                  <option value="Selected">Select</option>
-                  <option value="Waiting">Waiting</option>
-                  <option value="Rejected">Reject</option>
-                </select>
-                <button @click="updateAppStatus(app.id, app.newStatus)" class="btn btn-sm btn-primary" :disabled="!app.newStatus">Save</button>
-              </td>
-            </tr>
-            <tr v-if="applications.length === 0"><td colspan="5" class="text-muted py-3">No applications received yet.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
   </div>
 </template>
 
 <script>
 import axios from 'axios'
-
 export default {
   data() {
     return {
-      view: 'drives',
-      searchQuery: '',
-      userId: null,
-      companyName: '',
-      drives:[],
-      applications:[],
-      selectedDrive: null,
-      today: new Date().toISOString().split('T')[0],
-      form: { id: null, job_title: '', description: '', min_cgpa: '', salary: '', location: '', deadline: '' }
+      view: 'main',
+      drives: [],
+      apps: [],
+      selectedDrive: {},
+      activeApp: {},
+      cgpaFilter: 0,
+      isEdit: false,
+      companyName: localStorage.getItem('name') || 'Organization',
+      userId: localStorage.getItem('user_id'),
+      form: { id: null, job_title: '', description: '', min_cgpa: 0, salary: '', location: '', deadline: '' }
     }
   },
   computed: {
-    filteredActiveDrives() {
-      return this.drives.filter(d => d.status !== 'Closed' && d.title.toLowerCase().includes(this.searchQuery.toLowerCase()));
-    },
-    filteredClosedDrives() {
-      return this.drives.filter(d => d.status === 'Closed' && d.title.toLowerCase().includes(this.searchQuery.toLowerCase()));
-    }
+    upcoming() { return this.drives.filter(d => d.status !== 'Closed') },
+    closed() { return this.drives.filter(d => d.status === 'Closed') },
+    filteredApps() { return this.apps.filter(a => a.cgpa >= this.cgpaFilter) }
   },
   methods: {
-    async loadDrives() {
-      this.userId = localStorage.getItem('user_id');
-      this.companyName = localStorage.getItem('name') || 'Organization';
-      try {
-        const res = await axios.get(`http://localhost:5000/api/company/drives/${this.userId}`);
-        this.drives = res.data;
-      } catch (err) {
-        console.error("Failed to load drives", err);
-      }
+    async fetchDrives() {
+      if (!this.userId) { this.$router.push('/'); return; }
+      const res = await axios.get(`http://localhost:5000/api/company/drives/${this.userId}`)
+      this.drives = res.data
     },
-    openCreateForm() {
-      this.form = { id: null, job_title: '', description: '', min_cgpa: '', salary: '', location: '', deadline: '' };
-      this.view = 'create';
-    },
-    openEditForm(drive) {
-      // Form fields match exactly what backend expects
-      this.form = { 
-        id: drive.id, 
-        job_title: drive.title, 
-        description: drive.description, 
-        min_cgpa: drive.min_cgpa, 
-        salary: drive.salary, 
-        location: drive.location, 
-        deadline: drive.deadline 
-      };
-      this.view = 'edit';
+    prepareCreate() {
+      this.isEdit = false
+      this.form = { job_title: '', description: '', min_cgpa: 0, salary: '', location: '', deadline: '' }
     },
     async submitDrive() {
       try {
-        if (this.view === 'create') {
-          await axios.post(`http://localhost:5000/api/company/drives/${this.userId}`, this.form);
-          alert('Drive created successfully!');
+        if (this.isEdit) {
+          await axios.put(`http://localhost:5000/api/company/drive/${this.form.id}`, this.form)
         } else {
-          await axios.put(`http://localhost:5000/api/company/drive/${this.form.id}`, this.form);
-          alert('Drive updated successfully!');
+          await axios.post(`http://localhost:5000/api/company/drives/${this.userId}`, this.form)
         }
-        await this.loadDrives();
-        this.view = 'drives';
-      } catch (err) {
-        alert(err.response?.data?.message || "Action failed. Check console.");
-        console.error(err);
-      }
+        alert("Drive saved successfully!")
+        this.fetchDrives()
+      } catch (err) { alert(err.response?.data?.message || "Error saving drive.") }
     },
-    async deleteDrive(drive_id) {
-      if(!confirm("Are you sure you want to completely delete this drive and all its applications?")) return;
-      try {
-        await axios.delete(`http://localhost:5000/api/company/drive/${drive_id}`);
-        alert("Drive Deleted");
-        await this.loadDrives();
-      } catch (err) {
-        alert("Error deleting drive");
-      }
+    editDrive(d) {
+      this.isEdit = true
+      this.form = { id: d.id, job_title: d.title, description: d.description, min_cgpa: d.min_cgpa, salary: d.salary, location: d.location, deadline: d.deadline }
     },
-    async markComplete(drive_id) {
-      if(!confirm("Marking as complete will close this drive. Students will no longer see it or be able to apply. Continue?")) return;
-      try {
-        // Send status 'Closed' via PUT request
-        await axios.put(`http://localhost:5000/api/company/drive/${drive_id}`, { status: 'Closed' });
-        await this.loadDrives();
-      } catch (err) {
-        alert("Error closing drive");
-      }
+    async deleteDrive(id) {
+      if (!confirm("Are you sure? This will also remove all applications for this drive.")) return
+      await axios.delete(`http://localhost:5000/api/company/drive/${id}`)
+      this.fetchDrives()
     },
-    async viewApplications(drive) {
-      this.selectedDrive = drive;
-      try {
-        const res = await axios.get(`http://localhost:5000/api/drive/${drive.id}/applications`);
-        this.applications = res.data.map(app => ({ ...app, newStatus: '' }));
-        this.view = 'applications';
-      } catch (err) {
-        console.error(err);
-      }
+    async markComplete(id) {
+      if (!confirm("Marking as complete will close this drive for all students. Continue?")) return
+      await axios.put(`http://localhost:5000/api/company/drive/${id}/status`, { status: 'Closed' })
+      this.fetchDrives()
     },
-    async updateAppStatus(appId, newStatus) {
-      try {
-        await axios.post(`http://localhost:5000/api/application/status`, { application_id: appId, status: newStatus });
-        alert(`Status updated to ${newStatus}`);
-        await this.viewApplications(this.selectedDrive); 
-      } catch (err) {
-        alert("Failed to update status");
-      }
+    async openApplicants(d) {
+      this.selectedDrive = d
+      const res = await axios.get(`http://localhost:5000/api/drive/${d.id}/applications`)
+      this.apps = res.data
+      this.view = 'applicants'
     },
-    logout() {
-      localStorage.clear();
-      this.$router.push('/');
-    }
+    reviewStudent(app) {
+      this.activeApp = app
+      this.view = 'review'
+    },
+    async updateAppStatus(id, status) {
+      await axios.post(`http://localhost:5000/api/application/status`, { application_id: id, status: status })
+    },
+    getBadge(s) {
+      if(s==='Selected') return 'bg-success';
+      if(s==='Rejected') return 'bg-danger';
+      return 'bg-warning text-dark';
+    },
+    logout() { localStorage.clear(); this.$router.push('/') }
   },
-  mounted() {
-    this.loadDrives();
-  }
+  mounted() { this.fetchDrives() }
 }
 </script>

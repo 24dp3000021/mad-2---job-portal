@@ -6,10 +6,13 @@ from flask_restful import Api
 
 from models import db, User, Role
 from config import Config
-from api.resources import (UserRegistration, UserLogin, AdminDashboardStats,
-AdminManagement, CompanyDriveResource, CompanySingleDriveResource,
-DriveApplicationsResource, ApplicationStatusResource,
-StudentDriveResource, StudentProfileAction, StudentApplyResource, StudentCompanyList)
+from api.resources import (
+    UserRegistration, UserLogin, AdminDashboardStats,
+    AdminManagement, CompanyDriveResource, CompanySingleDriveResource, 
+    CompanyDriveStatusResource, DriveApplicationsResource, ApplicationStatusResource,
+    StudentDriveResource, StudentProfileAction, StudentApplyResource, 
+    StudentHistoryResource, StudentCompanyList
+)
 
 def create_app():
     app = Flask(__name__)
@@ -21,24 +24,26 @@ def create_app():
     # SETUP API ROUTES
     api = Api(app)
     
-    # auth routes
+    # 1. Auth routes
     api.add_resource(UserRegistration, '/api/register')
     api.add_resource(UserLogin, '/api/login')
     
-    # admin routes
+    # 2. Admin routes
     api.add_resource(AdminDashboardStats, '/api/admin/stats')
     api.add_resource(AdminManagement, '/api/admin/manage/<string:target>')
     
-    # company routes
+    # 3. Company routes
     api.add_resource(CompanyDriveResource, '/api/company/drives/<int:company_user_id>')
     api.add_resource(CompanySingleDriveResource, '/api/company/drive/<int:drive_id>')
+    api.add_resource(CompanyDriveStatusResource, '/api/company/drive/<int:drive_id>/status')
     api.add_resource(DriveApplicationsResource, '/api/drive/<int:drive_id>/applications')
     api.add_resource(ApplicationStatusResource, '/api/application/status')
     
-    # student routes
+    # 4. Student routes
     api.add_resource(StudentDriveResource, '/api/student/drives')
     api.add_resource(StudentProfileAction, '/api/student/profile/<int:user_id>')
-    api.add_resource(StudentApplyResource, '/api/student/apply', '/api/student/history/<int:user_id>')
+    api.add_resource(StudentApplyResource, '/api/student/apply') 
+    api.add_resource(StudentHistoryResource, '/api/student/history/<int:user_id>')
     api.add_resource(StudentCompanyList, '/api/student/companies') 
     
     # Initialize Database

@@ -1,307 +1,309 @@
 <template>
   <div class="container mt-4 pb-5">
-    <!-- NAVBAR -->
-    <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+    <!-- NAVBAR (Wireframe Top Bar) -->
+    <div class="d-flex justify-content-between border-bottom pb-2 mb-4 align-items-center">
       <div>
-        <h4 class="mb-0">Welcome {{ profile.name || 'Student' }}</h4>
-        <small>
-          <strong>Profile Status: </strong> 
-          <span class="badge" :class="profile.is_blacklisted ? 'bg-danger' : 'bg-success'">
-            {{ profile.is_blacklisted ? 'Blacklisted / Inactive' : 'Active' }}
+        <h4 class="mb-0">
+          Welcome {{ profile.name || backupName }} 
+          <span class="badge ms-2" :class="profile.active ? 'bg-success' : 'bg-danger'">
+            {{ profile.active ? 'Active' : 'Inactive' }}
           </span>
-        </small>
+        </h4>
       </div>
       <div class="nav-links">
-        <button @click="view = 'home'" class="btn btn-link text-dark">Home</button> |
-        <button @click="view = 'profile'" class="btn btn-link text-dark">Edit Profile</button> |
-        <button @click="view = 'history'" class="btn btn-link text-dark">History</button> |
-        <button @click="logout" class="btn btn-link text-danger">Logout</button>
+        <button @click="view = 'home'" class="btn btn-link text-dark text-decoration-none">Home</button> |
+        <button @click="view = 'profile'" class="btn btn-link text-dark text-decoration-none">Edit Profile</button> |
+        <button @click="view = 'history'" class="btn btn-link text-dark text-decoration-none">History</button> |
+        <button @click="logout" class="btn btn-link text-danger text-decoration-none">Logout</button>
       </div>
     </div>
 
-    <!-- VIEW 1: MAIN DASHBOARD -->
+    <!-- TRACKING DASHBOARD (Real-Time Stats) -->
+    <div v-if="view === 'home' || view === 'history'" class="row text-center mb-4 g-2">
+      <div class="col-md-3">
+        <div class="card bg-primary text-white p-2 shadow-sm border-0">
+          <h6 class="small mb-1">Total Applied</h6>
+          <h3>{{ trackingStats.total }}</h3>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-warning text-dark p-2 shadow-sm border-0">
+          <h6 class="small mb-1">Shortlisted</h6>
+          <h3>{{ trackingStats.shortlisted }}</h3>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-success text-white p-2 shadow-sm border-0">
+          <h6 class="small mb-1">Selected</h6>
+          <h3>{{ trackingStats.selected }}</h3>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-danger text-white p-2 shadow-sm border-0">
+          <h6 class="small mb-1">Rejected</h6>
+          <h3>{{ trackingStats.rejected }}</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 1: HOME (Organizations & Search) -->
     <div v-if="view === 'home'">
-      
-      <!-- Real-Time Application Tracking Stats -->
       <div class="row mb-4">
-        <div class="col-md-3">
-          <div class="card bg-primary text-white text-center p-3 shadow-sm">
-            <h6>Total Applied</h6><h3>{{ trackingStats.totalApplied }}</h3>
-          </div>
+        <div class="col-md-6">
+          <label class="small text-muted">Search Company</label>
+          <input v-model="search" class="form-control" placeholder="Type company name...">
         </div>
-        <div class="col-md-3">
-          <div class="card bg-warning text-dark text-center p-3 shadow-sm">
-            <h6>Pending/In Review</h6><h3>{{ trackingStats.pending }}</h3>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="card bg-success text-white text-center p-3 shadow-sm">
-            <h6>Shortlisted / Selected</h6><h3>{{ trackingStats.shortlisted }}</h3>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="card bg-danger text-white text-center p-3 shadow-sm">
-            <h6>Rejected</h6><h3>{{ trackingStats.rejected }}</h3>
-          </div>
+        <div class="col-md-6">
+          <label class="small text-muted">Eligibility Filter (Max Min-CGPA)</label>
+          <input v-model.number="cgpaLimit" type="number" step="0.1" class="form-control" placeholder="e.g. 7.5">
         </div>
       </div>
 
-      <!-- Search Bar -->
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="text-muted mb-0">All Placement Drives</h5>
-        <input v-model="searchQuery" type="text" class="form-control w-25 shadow-sm" placeholder="Search Drive or Company...">
-      </div>
-
-      <!-- Drives List -->
-      <div class="row">
-        <div class="col-12 mb-5">
-          <div v-for="drive in filteredDrives" :key="drive.id" class="card mb-2 border shadow-sm">
-            <div class="card-body d-flex justify-content-between align-items-center">
-              <div>
-                <h5 class="mb-1 text-primary">{{ drive.title }}</h5>
-                <span class="text-muted">{{ drive.company_name }} | Deadline: <strong>{{ drive.deadline }}</strong> | Min CGPA: <strong>{{ drive.min_cgpa }}</strong></span>
-              </div>
-              <button @click="showDriveDetails(drive)" class="btn btn-outline-primary btn-sm px-3">View & Apply</button>
-            </div>
-          </div>
-          <div v-if="filteredDrives.length === 0" class="text-center text-muted mt-4">
-            No placement drives found matching your search.
-          </div>
+      <h6 class="text-muted mb-3 border-bottom pb-1">Organizations</h6>
+      <div v-if="filteredCompanies.length === 0" class="alert alert-light border text-center">No organizations found matching your search.</div>
+      <div v-for="org in filteredCompanies" :key="org.id" class="card mb-2 shadow-sm border-0">
+        <div class="card-body d-flex justify-content-between align-items-center py-2">
+          <span class="fw-bold">{{ org.name }}</span>
+          <button @click="showDrives(org.id)" class="btn btn-primary btn-sm px-3">view details</button>
         </div>
       </div>
-    </div>
 
-    <!-- VIEW 2: EDIT PROFILE -->
-    <div v-if="view === 'profile'" class="row justify-content-center">
-      <div class="col-md-6 card shadow p-4">
-        <h5>Edit Detailed Profile</h5>
-        <div class="mb-3"><label>Full Name</label><input v-model="profile.name" class="form-control" disabled></div>
-        <div class="mb-3">
-            <label>Department</label>
-            <select v-model="profile.department" class="form-select">
-                <option value="Computer Science">Computer Science</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Mechanical">Mechanical</option>
-            </select>
-        </div>
-        <div class="mb-3"><label>CGPA</label><input v-model="profile.cgpa" type="number" step="0.01" class="form-control"></div>
-        <div class="mb-3"><label>Resume Link (File Path)</label><input v-model="profile.resume" type="text" class="form-control" placeholder="Upload path/URL"></div>
-        <button @click="updateProfile" class="btn btn-primary w-100">Save Changes</button>
-        <button @click="view = 'home'" class="btn btn-link w-100 mt-2">Back to Dashboard</button>
-      </div>
-    </div>
-
-    <!-- VIEW 3: DRIVE DETAILS -->
-    <div v-if="view === 'drive_details'" class="row justify-content-center">
-      <div class="col-md-8 card shadow p-4">
-        <div class="d-flex justify-content-between">
-            <div>
-                <h3 class="text-primary">{{ selectedDrive.title }}</h3>
-                <h5 class="text-muted">{{ selectedDrive.company_name }}</h5>
-                <p class="mt-4">{{ selectedDrive.description }}</p>
-                <p><strong>Min CGPA Required:</strong> {{ selectedDrive.min_cgpa }}</p>
-                <p><strong>Salary:</strong> {{ selectedDrive.salary || 'Competitive' }}</p>
-                <p><strong>Location:</strong> {{ selectedDrive.location || 'Remote' }}</p>
-                <p><strong>Deadline:</strong> <span class="text-danger">{{ selectedDrive.deadline }}</span></p>
-            </div>
-            <div class="text-center">
-                <div class="rounded-circle bg-info mb-2" style="width:80px; height:80px; margin:auto"></div>
-                <small>LOGO</small>
-            </div>
-        </div>
-        
-        <div class="mt-4 border-top pt-3 d-flex gap-2 align-items-center">
-            <template v-if="!canApply(selectedDrive).allowed">
-                <div class="alert alert-warning mb-0 w-100">
-                    <strong>Cannot Apply: </strong> {{ canApply(selectedDrive).reason }}
-                </div>
-            </template>
-            <template v-else>
-                <button @click="apply(selectedDrive.id)" class="btn btn-success px-5">Submit Application</button>
-            </template>
-            <button @click="view = 'home'" class="btn btn-outline-secondary px-4">Go Back</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- VIEW 4: HISTORY -->
-    <div v-if="view === 'history'">
-      <div class="card shadow p-4 border-0">
-        <div class="d-flex justify-content-between align-items-start mb-4">
-            <div>
-                <h4>Student Application History</h4>
-                <p class="mb-0"><strong>Student Name:</strong> {{ profile.name }}</p>
-                <p><strong>Department:</strong> {{ profile.department || 'Not Updated' }}</p>
-            </div>
-            <button @click="view = 'home'" class="btn btn-outline-primary btn-sm">Back to Home</button>
-        </div>
-        <table class="table table-bordered text-center align-middle">
-            <thead class="table-light">
-                <tr><th>No.</th><th>Job Title</th><th>Company</th><th>Date Applied</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                <tr v-for="(app, index) in history" :key="index">
-                    <td>{{ index + 1 }}</td>
-                    <td>{{ app.drive_title }}</td>
-                    <td>{{ app.company }}</td>
-                    <td>{{ app.date }}</td>
-                    <td>
-                      <span class="badge" 
-                            :class="{'bg-success': app.status === 'Selected' || app.status === 'Shortlisted', 
-                                     'bg-warning text-dark': app.status === 'Applied' || app.status === 'Pending' || app.status === 'Waiting', 
-                                     'bg-danger': app.status === 'Rejected'}">
-                        {{ app.status }}
-                      </span>
-                    </td>
-                </tr>
-                <tr v-if="history.length === 0">
-                  <td colspan="5" class="text-muted py-4">You have not applied to any companies yet.</td>
-                </tr>
-            </tbody>
+      <div class="mt-5">
+        <h6 class="text-muted mb-3 border-bottom pb-1">Recent Applied Drives (Summary)</h6>
+        <table class="table table-bordered bg-white shadow-sm align-middle text-center">
+          <thead class="table-light">
+            <tr><th>Sr No.</th><th>Drive Name</th><th>Company</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(app, idx) in history.slice(0, 3)" :key="idx">
+              <td>{{ idx + 1 }}</td>
+              <td>{{ app.drive_title }}</td>
+              <td>{{ app.company }}</td>
+              <td><button @click="view = 'history'" class="btn btn-outline-primary btn-sm px-3">view details</button></td>
+            </tr>
+            <tr v-if="history.length === 0"><td colspan="4" class="text-muted">Apply to jobs to see your summary here.</td></tr>
+          </tbody>
         </table>
       </div>
+    </div>
+
+    <!-- VIEW 2: PROFILE (CRITICAL FIX FOR 0 CGPA) -->
+    <div v-if="view === 'profile'" class="row justify-content-center">
+      <div class="col-md-6 card shadow p-4 border-0">
+        <h5 class="mb-4 text-center border-bottom pb-2">Edit Detailed Profile</h5>
+        <div class="mb-3">
+          <label class="small fw-bold">Full Name</label>
+          <input v-model="profile.name" class="form-control" disabled>
+        </div>
+        <div class="mb-3">
+          <label class="small fw-bold">Department</label>
+          <select v-model="profile.department" class="form-select">
+            <option value="Computer Science">Computer Science</option>
+            <option value="Electrical">Electrical</option>
+            <option value="Mechanical">Mechanical</option>
+            <option value="Electronics">Electronics</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="small fw-bold">Current CGPA (Update this to enable applying)</label>
+          <input v-model.number="profile.cgpa" type="number" step="0.01" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label class="small fw-bold">Resume Link (PDF URL)</label>
+          <input v-model="profile.resume" class="form-control" placeholder="Google Drive / Dropbox link">
+        </div>
+        <button @click="updateProfile" class="btn btn-success w-100 mt-2">Save Profile & Refresh Status</button>
+        <button @click="view = 'home'" class="btn btn-link w-100 mt-2 text-dark">Cancel</button>
+      </div>
+    </div>
+
+    <!-- VIEW 3: DRIVE LIST (For specific Org) -->
+    <div v-if="view === 'drive_list'">
+      <div class="d-flex justify-content-between mb-3 align-items-center">
+        <button @click="view = 'home'" class="btn btn-sm btn-secondary">← Back to Organizations</button>
+        <input v-model="jobSearch" class="form-control w-25" placeholder="Filter jobs...">
+      </div>
+      <div v-for="d in filteredOrgDrives" :key="d.id" class="card mb-2 p-3 border-start border-4 shadow-sm" :class="d.is_expired ? 'border-danger' : 'border-success'">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0 text-primary">{{ d.title }}</h5>
+            <small class="text-muted">Min CGPA required: {{ d.min_cgpa }} | Status: <strong>{{ d.is_expired ? 'CLOSED' : 'OPEN' }}</strong></small>
+          </div>
+          <button @click="openDetails(d)" class="btn btn-primary btn-sm px-3">view details</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 4: DRIVE DETAILS & APPLY -->
+    <div v-if="view === 'details'" class="card shadow p-4 border-0 mx-auto" style="max-width: 850px;">
+        <div class="d-flex justify-content-between align-items-start">
+          <div class="col-8">
+            <h2 class="text-primary">{{ selectedDrive.title }}</h2>
+            <h5 class="text-muted mb-4">{{ selectedDrive.company_name }}</h5>
+            <h6>Job Description:</h6>
+            <p class="text-secondary">{{ selectedDrive.description }}</p>
+            <hr>
+            <p><strong>Salary Package:</strong> {{ selectedDrive.salary }}</p>
+            <p><strong>Location:</strong> {{ selectedDrive.location }}</p>
+            <p><strong>Min CGPA Criteria:</strong> {{ selectedDrive.min_cgpa }}</p>
+          </div>
+          <div class="col-4 text-center">
+            <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center mx-auto mb-2" style="width:100px; height:100px; font-size: 12px; color: #aaa;">LOGO</div>
+            <p class="small text-muted mb-0">Deadline</p>
+            <p class="fw-bold text-danger">{{ selectedDrive.deadline }}</p>
+          </div>
+        </div>
+        <div class="mt-4 border-top pt-3 d-flex gap-2">
+          <button @click="apply(selectedDrive.id)" 
+                  class="btn btn-primary px-5" 
+                  :disabled="hasApplied(selectedDrive.id) || selectedDrive.is_expired || profile.cgpa < selectedDrive.min_cgpa">
+            {{ getBtnText(selectedDrive) }}
+          </button>
+          <button @click="view = 'drive_list'" class="btn btn-outline-secondary px-4">Go Back</button>
+        </div>
+    </div>
+
+    <!-- VIEW 5: HISTORY PAGE -->
+    <div v-if="view === 'history'" class="card shadow p-4 border-0">
+      <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+        <div>
+          <h4 class="mb-0">Student Application History</h4>
+          <p class="small text-muted mb-0">Student: {{ profile.name }} | Dept: {{ profile.department }}</p>
+        </div>
+        <button @click="view = 'home'" class="btn btn-sm btn-outline-primary px-4">Back to Dashboard</button>
+      </div>
+      <table class="table table-hover text-center align-middle border shadow-sm">
+        <thead class="table-light">
+          <tr><th>No.</th><th>Job Title</th><th>Company</th><th>Date Applied</th><th>Status</th><th>Remark</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="(a, idx) in history" :key="a.drive_id">
+            <td>{{ idx + 1 }}</td>
+            <td class="fw-bold">{{ a.drive_title }}</td>
+            <td>{{ a.company }}</td>
+            <td>{{ a.date }}</td>
+            <td>
+              <span class="badge px-3 py-2" :class="getBadgeClass(a.status)">{{ a.status }}</span>
+            </td>
+            <td class="small text-muted">None</td>
+          </tr>
+          <tr v-if="history.length === 0"><td colspan="6" class="py-5 text-muted">No application history found. Search for jobs on the home page to apply!</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>
 
 <script>
 import axios from 'axios'
-
 export default {
   data() {
     return {
       view: 'home',
-      searchQuery: '',
-      profile: { name: '', cgpa: 0, resume: '', department: '', is_blacklisted: false },
+      search: '',
+      cgpaLimit: null,
+      jobSearch: '',
+      profile: { name: '', cgpa: 0, active: true, department: '', is_blacklisted: false },
       companies: [],
-      drives:[],
-      history:[],
+      drives: [],
+      history: [],
+      selectedOrgId: null,
       selectedDrive: {},
-      userId: null 
+      userId: null,
+      backupName: localStorage.getItem('name')
     }
   },
   computed: {
-    filteredDrives() {
-      if (!this.drives) return[];
-      if (!this.searchQuery) return this.drives;
-      const q = this.searchQuery.toLowerCase();
+    filteredCompanies() {
+      return this.companies.filter(c => c.name.toLowerCase().includes(this.search.toLowerCase()))
+    },
+    filteredOrgDrives() {
       return this.drives.filter(d => 
-        (d.title && d.title.toLowerCase().includes(q)) || 
-        (d.company_name && d.company_name.toLowerCase().includes(q))
-      );
+        d.company_id === this.selectedOrgId && 
+        (this.cgpaLimit ? d.min_cgpa <= this.cgpaLimit : true) &&
+        d.title.toLowerCase().includes(this.jobSearch.toLowerCase())
+      )
     },
     trackingStats() {
-      const safeHistory = Array.isArray(this.history) ? this.history :[];
-      let stats = { totalApplied: safeHistory.length, pending: 0, shortlisted: 0, rejected: 0 };
-      
-      safeHistory.forEach(app => {
-        const st = (app.status || '').toLowerCase();
-        if (st === 'applied' || st === 'pending' || st === 'waiting') stats.pending++;
-        else if (st === 'shortlisted' || st === 'selected') stats.shortlisted++;
-        else if (st === 'rejected') stats.rejected++;
-      });
-      return stats;
+      return {
+        total: this.history.length,
+        shortlisted: this.history.filter(a => a.status === 'Shortlisted' || a.status === 'Selected').length,
+        selected: this.history.filter(a => a.status === 'Selected').length,
+        rejected: this.history.filter(a => a.status === 'Rejected').length
+      }
     }
   },
   methods: {
     async loadData() {
-      this.userId = localStorage.getItem('user_id');
+      this.userId = localStorage.getItem('user_id'); // Persistent ID fetch
       if (!this.userId) {
         this.$router.push('/');
         return;
       }
-
-      // Safe API loading: If one fails, the others still work!
       try {
-        const pRes = await axios.get(`http://localhost:5000/api/student/profile/${this.userId}`);
-        this.profile = pRes.data || { name: '', cgpa: 0, is_blacklisted: false };
-      } catch(e) { console.error("Profile Error", e); }
-
-      try {
-        const cRes = await axios.get(`http://localhost:5000/api/student/companies`);
-        this.companies = cRes.data ||[];
-      } catch(e) { console.error("Company Error", e); }
-
-      try {
-        const hRes = await axios.get(`http://localhost:5000/api/student/history/${this.userId}`);
-        this.history = hRes.data ||[];
-      } catch(e) { console.error("History Error", e); this.history =[]; }
-
-      try {
-        const dRes = await axios.get(`http://localhost:5000/api/student/drives`);
-        this.drives = dRes.data ||[];
-      } catch(e) { console.error("Drives Error", e); this.drives =[]; }
+        const [p, c, h, d] = await Promise.all([
+          axios.get(`http://localhost:5000/api/student/profile/${this.userId}`),
+          axios.get(`http://localhost:5000/api/student/companies`),
+          axios.get(`http://localhost:5000/api/student/history/${this.userId}`),
+          axios.get(`http://localhost:5000/api/student/drives`)
+        ]);
+        this.profile = p.data;
+        this.companies = c.data;
+        this.history = h.data;
+        this.drives = d.data;
+      } catch (err) {
+        console.log("Fetch failed. User might have been logged out manually.");
+      }
     },
-    showDriveDetails(drive) {
-        this.selectedDrive = drive;
-        this.view = 'drive_details';
+    showDrives(id) {
+      this.selectedOrgId = id;
+      this.view = 'drive_list';
     },
-    canApply(drive) {
-        if (this.profile.is_blacklisted) {
-            return { allowed: false, reason: "Your profile has been blacklisted by the Institute Admin. You cannot apply." };
-        }
-        
-        const today = new Date().toISOString().split('T')[0];
-        if (drive.deadline < today) {
-            return { allowed: false, reason: "The application deadline for this drive has passed." };
-        }
-        
-        const myCgpa = parseFloat(this.profile.cgpa) || 0;
-        const requiredCgpa = parseFloat(drive.min_cgpa) || 0;
-        if (myCgpa < requiredCgpa) {
-            return { allowed: false, reason: `Minimum CGPA of ${drive.min_cgpa} is required. Your CGPA is ${this.profile.cgpa}.` };
-        }
-        
-        const safeHistory = Array.isArray(this.history) ? this.history :[];
-        const alreadyApplied = safeHistory.find(h => h.drive_title === drive.title && h.company === drive.company_name);
-        
-        if (alreadyApplied) {
-            return { allowed: false, reason: "You have already applied for this drive." };
-        }
-        
-        return { allowed: true, reason: "" };
+    openDetails(d) {
+      this.selectedDrive = d;
+      this.view = 'details';
+    },
+    hasApplied(id) {
+      return this.history.some(a => a.drive_id === id)
+    },
+    getBtnText(d) {
+      if (this.hasApplied(d.id)) return 'Applied';
+      if (d.is_expired) return 'Closed';
+      if (this.profile.cgpa < d.min_cgpa) return 'Ineligible';
+      return 'Apply';
+    },
+    getBadgeClass(s) {
+      if (s === 'Selected') return 'bg-success';
+      if (s === 'Rejected') return 'bg-danger';
+      if (s === 'Shortlisted' || s === 'Waiting') return 'bg-warning text-dark';
+      return 'bg-info text-dark';
     },
     async updateProfile() {
       try {
-        await axios.put(`http://localhost:5000/api/student/profile/${this.userId}`, { 
-            cgpa: this.profile.cgpa, 
-            resume_link: this.profile.resume, 
-            department: this.profile.department 
-        });
+        await axios.put(`http://localhost:5000/api/student/profile/${this.userId}`, this.profile);
         alert("Profile Saved successfully!");
-        this.loadData();
+        await this.loadData(); // Sync with backend
         this.view = 'home';
-      } catch (err) {
-        alert("Failed to update profile.");
-      }
+      } catch (e) { alert("Failed to update profile."); }
     },
     async apply(id) {
+      if (!this.profile.active) { alert("Account inactive. Contact Admin."); return; }
       try {
-        // Automatically save CGPA before applying to ensure backend sees the latest
-        await axios.put(`http://localhost:5000/api/student/profile/${this.userId}`, { cgpa: this.profile.cgpa });
-        
-        // Submit the application
         const res = await axios.post(`http://localhost:5000/api/student/apply`, { user_id: this.userId, drive_id: id });
         alert(res.data.message);
-        
-        await this.loadData();
-        this.view = 'home';
-      } catch (err) { 
-        alert(err.response?.data?.message || "An error occurred while applying."); 
+        await this.loadData(); // Refresh history immediately
+        this.view = 'history'; // Send to history to confirm status
+      } catch (err) {
+        alert(err.response?.data?.message || "Error applying.");
       }
     },
-    logout() { 
-        localStorage.clear(); 
-        this.$router.push('/'); 
+    logout() {
+      localStorage.clear();
+      this.$router.push('/');
     }
   },
-  mounted() { 
-      this.loadData(); 
+  mounted() {
+    this.loadData();
   }
 }
 </script>
-
-<style scoped>
-.card { transition: transform 0.2s; }
-.card:hover { transform: translateY(-2px); }
-</style>
